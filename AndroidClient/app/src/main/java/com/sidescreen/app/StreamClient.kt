@@ -136,7 +136,6 @@ class StreamClient(
                 streamCodecIsHevc = true
                 codecNegotiated = false
                 stylusSupportedByHost = false
-                stylusSupportedByHost = false
                 prepareAdvertisements()
                 advertiseAvcOnlyIfNeeded() // MUST precede type 8: type 8 can trigger the server's early protocol finish
                 advertiseDecoderLimits() // Also before type 8, for the same reason
