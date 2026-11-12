@@ -43,7 +43,7 @@ private enum WireMessage {
     static let clientSupportsStylus: UInt8 = 20
     static let stylusSupported: UInt8 = 21
     static let stylusButtonConfig: UInt8 = 22
-    /// Client→server, fixed 21-byte payload: normalized x/y, action, pressure, tilt, button flags.
+    /// Client→server, fixed 25-byte payload after the type byte (26 bytes total): normalized x/y, action, pressure, tiltX/Y, button flags.
     static let stylusEvent: UInt8 = 19
 }
 
