@@ -40,6 +40,8 @@ private enum WireMessage {
     /// BEFORE type 8, so the host knows which profile to apply before the
     /// display config goes out.
     static let clientIdentity: UInt8 = 18
+    /// Client→server, fixed 21-byte payload: normalized x/y, action, pressure, tilt, button flags.
+    static let stylusEvent: UInt8 = 19
 }
 
 private extension String {
@@ -168,8 +170,10 @@ class StreamingServer {
     /// config is sent, for every outcome (.hevc or .h264) — so the capture
     /// pipeline can also revert to HEVC after an AVC-only client goes away.
     var onCodecNegotiated: ((StreamCodec) -> Void)?
-    // Touch callback: coordinates, action, pointer count, second pointer, pressure, tilt, flags.
-    var onTouchEvent: ((Float, Float, Int, Int, Float, Float, Float, Float, Int) -> Void)?
+    // Legacy touch callback remains wire-compatible with existing clients.
+    var onTouchEvent: ((Float, Float, Int, Int, Float, Float) -> Void)?
+    // Dedicated stylus callback: normalized x/y, action, pressure, tilt, button flags.
+    var onStylusEvent: ((Float, Float, Int, Float, Float, Int) -> Void)?
     var onStats: ((Double, Double) -> Void)?
     var onKeyframeRequested: ((Bool) -> Void)?
     // Whether host wants to receive touch events from client. Ping/pong is
@@ -711,32 +715,29 @@ class StreamingServer {
         while let msgType = inputBuffer.first {
             switch msgType {
             case WireMessage.touchEvent:
-                // Touch event: 1 type + 1 pointerCount + N*(4x+4y) + 4 action.
-                // Legacy payloads: 1 finger 14 bytes, 2 fingers 22 bytes. Stylus extension adds 12 bytes.
+                // Legacy touch event: 1 type + 1 pointerCount + N*(4x+4y) + 4 action.
                 guard inputBuffer.count >= 2 else { return }
-
                 let pointerCount = Int(inputByte(at: 1))
                 guard pointerCount == 1 || pointerCount == 2 else {
                     debugLog("Invalid touch pointer count: \(pointerCount)")
                     consumeInputBytes(1)
                     continue
                 }
-
-                let legacySize = 2 + pointerCount * 8 + 4
-                guard inputBuffer.count >= legacySize else { return }
-                // Extended stylus packets have 12 trailing bytes (pressure, tilt, flags).
-                let extendedSize = legacySize + 12
-                let hasExtension = inputBuffer.count >= extendedSize &&
-                    inputBuffer[inputBuffer.index(inputBuffer.startIndex, offsetBy: legacySize)] == 0x7E
-                let expectedSize = hasExtension ? extendedSize : legacySize
-
+                let expectedSize = 2 + pointerCount * 8 + 4
+                guard inputBuffer.count >= expectedSize else { return }
                 let message = Data(inputBuffer.prefix(expectedSize))
                 consumeInputBytes(expectedSize)
-
-                // Drop early if host has touch disabled, after consuming exactly
-                // this touch frame so coalesced ping/keyframe messages survive.
                 if touchEnabled {
                     handleTouchMessage(message, pointerCount: pointerCount)
+                }
+
+            case WireMessage.stylusEvent:
+                // Fixed 21-byte payload after the type: x, y, action, pressure, tilt, flags.
+                guard inputBuffer.count >= 22 else { return }
+                let message = Data(inputBuffer.prefix(22))
+                consumeInputBytes(22)
+                if touchEnabled {
+                    handleStylusMessage(message)
                 }
 
             case WireMessage.ping:
@@ -916,27 +917,28 @@ class StreamingServer {
     private func handleTouchMessage(_ data: Data, pointerCount: Int) {
         let x1 = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 2, as: Float.self) }
         let y1 = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 6, as: Float.self) }
-
         var x2: Float = 0
         var y2: Float = 0
         if pointerCount >= 2 {
             x2 = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 10, as: Float.self) }
             y2 = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 14, as: Float.self) }
         }
-
         let actionOffset = 2 + pointerCount * 8
         let action = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: actionOffset, as: Int32.self) }
-        var pressure: Float = 0
-        var tilt: Float = 0
-        var flags = 0
-        if data.count >= actionOffset + 16 && data[actionOffset + 4] == 0x7E {
-            pressure = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: actionOffset + 5, as: Float.self) }
-            tilt = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: actionOffset + 9, as: Float.self) }
-            flags = Int(data[actionOffset + 13])
-        }
-
         DispatchQueue.main.async {
-            self.onTouchEvent?(x1, y1, Int(action), pointerCount, x2, y2, pressure, tilt, flags)
+            self.onTouchEvent?(x1, y1, Int(action), pointerCount, x2, y2)
+        }
+    }
+
+    private func handleStylusMessage(_ data: Data) {
+        let x = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 1, as: Float.self) }
+        let y = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 5, as: Float.self) }
+        let action = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 9, as: Int32.self) }
+        let pressure = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 13, as: Float.self) }
+        let tilt = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 17, as: Float.self) }
+        let flags = Int(data[21])
+        DispatchQueue.main.async {
+            self.onStylusEvent?(x, y, Int(action), pressure, tilt, flags)
         }
     }
 
