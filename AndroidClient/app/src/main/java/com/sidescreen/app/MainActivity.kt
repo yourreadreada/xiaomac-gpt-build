@@ -1758,22 +1758,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleStylusHover(view: View, event: MotionEvent): Boolean {
-        if (event.getToolType(0) != MotionEvent.TOOL_TYPE_STYLUS) return false
-        val x = (event.x / view.width.toFloat()).coerceIn(0f, 1f)
-        val y = (event.y / view.height.toFloat()).coerceIn(0f, 1f)
-        val tilt = event.getAxisValue(MotionEvent.AXIS_TILT, 0).coerceIn(0f, 1f)
+        if (event.pointerCount == 0) return false
+        val toolType = event.getToolType(0)
+        if (toolType != MotionEvent.TOOL_TYPE_STYLUS && toolType != MotionEvent.TOOL_TYPE_ERASER) return false
+        val rawX = event.x / view.width.toFloat()
+        val rawY = event.y / view.height.toFloat()
+        val x = (if (displayFlipHorizontal) 1f - rawX else rawX).coerceIn(0f, 1f)
+        val y = (if (displayFlipVertical) 1f - rawY else rawY).coerceIn(0f, 1f)
+        val tiltRadians = event.getAxisValue(MotionEvent.AXIS_TILT, 0)
+            .coerceIn(0f, (Math.PI / 2).toFloat())
+        val tilt = kotlin.math.sin(tiltRadians)
         when (event.actionMasked) {
             MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE ->
-                streamClient?.sendTouch(x, y, 3, pressure = 0f, tilt = tilt, flags = 1 or 2)
+                streamClient?.sendStylus(x, y, 3, pressure = 0f, tilt = tilt, flags = 1 or 2)
             MotionEvent.ACTION_HOVER_EXIT ->
-                streamClient?.sendTouch(x, y, 4, pressure = 0f, tilt = tilt, flags = 1 or 2)
+                streamClient?.sendStylus(x, y, 4, pressure = 0f, tilt = tilt, flags = 1 or 2)
             else -> return false
         }
         return true
     }
 
     private fun handleStylusGenericMotion(view: View, event: MotionEvent): Boolean {
-        if (event.pointerCount == 0 || event.getToolType(0) != MotionEvent.TOOL_TYPE_STYLUS) return false
+        if (event.pointerCount == 0) return false
+        val toolType = event.getToolType(0)
+        if (toolType != MotionEvent.TOOL_TYPE_STYLUS && toolType != MotionEvent.TOOL_TYPE_ERASER) return false
         if (event.actionMasked != MotionEvent.ACTION_BUTTON_PRESS &&
             event.actionMasked != MotionEvent.ACTION_BUTTON_RELEASE
         ) return false
