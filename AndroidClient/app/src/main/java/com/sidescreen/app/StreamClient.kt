@@ -29,6 +29,10 @@ class StreamClient(
     private var outputStream: java.io.DataOutputStream? = null
     private var isConnected = false
     @Volatile private var stylusSupportedByHost = false
+    @Volatile var remotePrimaryButtonAction: Int = 1
+        private set
+    @Volatile var remoteSecondaryButtonAction: Int = 0
+        private set
 
     // Callback includes actual frame size (may differ from buffer.size due to pooling),
     // receive timestamp, and whether the frame can restart HEVC decoding.
@@ -546,6 +550,12 @@ class StreamClient(
                             diagLog("Host supports XiaoMac stylus input")
                         }
 
+                        MESSAGE_STYLUS_BUTTON_CONFIG -> {
+                            remotePrimaryButtonAction = input.readUnsignedByte()
+                            remoteSecondaryButtonAction = input.readUnsignedByte()
+                            diagLog("Pen button config: primary=$remotePrimaryButtonAction secondary=$remoteSecondaryButtonAction")
+                        }
+
                         MESSAGE_CODEC_SELECTED -> {
                             val codecId = input.readByte().toInt()
                             streamCodecIsHevc = codecId == 0
@@ -614,20 +624,23 @@ class StreamClient(
         y: Float,
         action: Int,
         pressure: Float = 0f,
-        tilt: Float = 0f,
+        tiltX: Float = 0f,
+        tiltY: Float = 0f,
         flags: Int = 1,
     ) {
         if (!isConnected || !stylusSupportedByHost) return
         touchScope.launch {
             try {
                 socket?.getOutputStream()?.let { out ->
-                    val buffer = ByteBuffer.allocate(22).order(ByteOrder.LITTLE_ENDIAN)
+                    // type + normalized x/y + action + pressure + tiltX/Y + flags
+                    val buffer = ByteBuffer.allocate(26).order(ByteOrder.LITTLE_ENDIAN)
                     buffer.put(19.toByte())
-                    buffer.putFloat(x)
-                    buffer.putFloat(y)
+                    buffer.putFloat(x.coerceIn(0f, 1f))
+                    buffer.putFloat(y.coerceIn(0f, 1f))
                     buffer.putInt(action)
-                    buffer.putFloat(pressure)
-                    buffer.putFloat(tilt)
+                    buffer.putFloat(pressure.coerceIn(0f, 1f))
+                    buffer.putFloat(tiltX.coerceIn(-1f, 1f))
+                    buffer.putFloat(tiltY.coerceIn(-1f, 1f))
                     buffer.put(flags.toByte())
                     out.write(buffer.array())
                     out.flush()
@@ -844,6 +857,7 @@ class StreamClient(
         private const val MESSAGE_CLIENT_IDENTITY = 18 // 15–17 reserved
         private const val MESSAGE_CLIENT_SUPPORTS_STYLUS = 20
         private const val MESSAGE_STYLUS_SUPPORTED = 21
+        private const val MESSAGE_STYLUS_BUTTON_CONFIG = 22
         private const val FRAME_FLAG_KEYFRAME = 1
         private const val KEYFRAME_REQUEST_FLAG_FORCE = 1
 
