@@ -517,6 +517,35 @@ struct SettingsView: View {
                                         .labelsHidden()
                                 }
 
+                                Divider()
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Enable Stylus Input")
+                                            .font(.system(size: 12, weight: .medium))
+                                        Text("Pressure and tilt support when reported by Android")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Toggle("", isOn: $settings.stylusEnabled)
+                                        .labelsHidden()
+                                }
+                                .disabled(!settings.touchEnabled)
+
+                                Picker("Primary button", selection: $settings.stylusPrimaryAction) {
+                                    Text("Brush / Eraser Toggle").tag("brushEraser")
+                                    Text("No action").tag("none")
+                                }
+                                .pickerStyle(.menu)
+                                .disabled(!settings.touchEnabled || !settings.stylusEnabled)
+
+                                Picker("Secondary button", selection: $settings.stylusSecondaryAction) {
+                                    Text("System Default (Screenshot)").tag("systemDefault")
+                                    Text("No action").tag("none")
+                                }
+                                .pickerStyle(.menu)
+                                .disabled(!settings.touchEnabled || !settings.stylusEnabled)
+
                                 if !settings.touchEnabled {
                                     Text("Touch input is disabled — tablet is display-only")
                                         .font(.system(size: 10))
@@ -1333,6 +1362,15 @@ class DisplaySettings: ObservableObject {
     @Published var touchEnabled: Bool {
         didSet { save("touchEnabled", touchEnabled) }
     }
+    @Published var stylusEnabled: Bool {
+        didSet { save("stylusEnabled", stylusEnabled) }
+    }
+    @Published var stylusPrimaryAction: String {
+        didSet { save("stylusPrimaryAction", stylusPrimaryAction) }
+    }
+    @Published var stylusSecondaryAction: String {
+        didSet { save("stylusSecondaryAction", stylusSecondaryAction) }
+    }
     @Published var connectionMode: ConnectionMode {
         didSet { save("connectionMode", connectionMode.rawValue) }
     }
@@ -1389,6 +1427,9 @@ class DisplaySettings: ObservableObject {
         self.customWidth = defaults.object(forKey: keyPrefix + "customWidth") as? Int ?? 1920
         self.customHeight = defaults.object(forKey: keyPrefix + "customHeight") as? Int ?? 1200
         self.touchEnabled = defaults.object(forKey: keyPrefix + "touchEnabled") as? Bool ?? true
+        self.stylusEnabled = defaults.object(forKey: keyPrefix + "stylusEnabled") as? Bool ?? true
+        self.stylusPrimaryAction = defaults.string(forKey: keyPrefix + "stylusPrimaryAction") ?? "brushEraser"
+        self.stylusSecondaryAction = defaults.string(forKey: keyPrefix + "stylusSecondaryAction") ?? "systemDefault"
         let modeRaw = defaults.string(forKey: keyPrefix + "connectionMode") ?? ConnectionMode.usb.rawValue
         self.connectionMode = ConnectionMode(rawValue: modeRaw) ?? .usb
         self.autoStartStreamingOnLaunch = defaults.object(forKey: keyPrefix + "autoStartStreamingOnLaunch") as? Bool ?? false
@@ -1499,7 +1540,7 @@ class DisplaySettings: ObservableObject {
     func resetToDefaults() {
         let keys = ["resolution", "refreshRate", "hiDPI", "bitrate", "quality",
                     "gamingBoost", "port", "rotation", "flipHorizontal", "flipVertical", "showAllResolutions",
-                    "customWidth", "customHeight", "touchEnabled", "autoStartStreamingOnLaunch", "startupMode"]
+                    "customWidth", "customHeight", "touchEnabled", "stylusEnabled", "stylusPrimaryAction", "stylusSecondaryAction", "autoStartStreamingOnLaunch", "startupMode"]
         for key in keys {
             defaults.removeObject(forKey: keyPrefix + key)
         }
@@ -1518,6 +1559,9 @@ class DisplaySettings: ObservableObject {
         customWidth = 1920
         customHeight = 1200
         touchEnabled = true
+        stylusEnabled = true
+        stylusPrimaryAction = "brushEraser"
+        stylusSecondaryAction = "systemDefault"
         autoStartStreamingOnLaunch = false
         startupMode = .usb
 
