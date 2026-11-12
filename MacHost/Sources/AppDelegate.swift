@@ -47,6 +47,13 @@ struct GestureThresholds {
     static let minTouchInterval: UInt64 = 8_000_000    // ~120Hz
 }
 
+private struct TabletPointAttributes {
+    let pressure: Float
+    let tiltX: Float
+    let tiltY: Float
+    let flags: Int
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var streamingServer: StreamingServer?
     var screenCapture: ScreenCapture?
@@ -1025,8 +1032,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if (flags & 2) != 0 {
                 if action == 3 {
                     moveCursor(to: p1)
-                    injectTabletPoint(at: p1, type: .mouseMoved, pressure: 0,
-                                      tiltX: tiltX, tiltY: tiltY, flags: flags)
+                    injectTabletPoint(
+                        at: p1,
+                        type: .mouseMoved,
+                        attributes: TabletPointAttributes(pressure: 0, tiltX: tiltX, tiltY: tiltY, flags: flags),
+                    )
                 }
                 return
             }
@@ -1038,14 +1048,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 gestureState = .penDrawing
                 primaryStylusDown = true
                 moveCursor(to: p1)
-                injectTabletPoint(at: p1, type: .leftMouseDown, pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags)
+                injectTabletPoint(
+                    at: p1,
+                    type: .leftMouseDown,
+                    attributes: TabletPointAttributes(pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags),
+                )
             case 1:
                 guard primaryStylusDown else { return }
-                injectTabletPoint(at: p1, type: .leftMouseDragged, pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags)
+                injectTabletPoint(
+                    at: p1,
+                    type: .leftMouseDragged,
+                    attributes: TabletPointAttributes(pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags),
+                )
                 touchLastPosition = p1
             case 2, 4:
                 guard primaryStylusDown else { return }
-                injectTabletPoint(at: p1, type: .leftMouseUp, pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags)
+                injectTabletPoint(
+                    at: p1,
+                    type: .leftMouseUp,
+                    attributes: TabletPointAttributes(pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags),
+                )
                 primaryStylusDown = false
                 gestureState = .idle
             default: break
@@ -1060,23 +1082,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func injectTabletPoint(at point: CGPoint, type: CGEventType, pressure: Float,
-                                   tiltX: Float, tiltY: Float, flags: Int) {
+    private func injectTabletPoint(at point: CGPoint, type: CGEventType, attributes: TabletPointAttributes) {
         guard let event = CGEvent(mouseEventSource: eventSource, mouseType: type,
                                   mouseCursorPosition: point, mouseButton: .left) else { return }
         event.setIntegerValueField(.mouseEventSubtype, value: Int64(CGEventMouseSubtype.tabletPoint.rawValue))
-        event.setDoubleValueField(.tabletEventPointPressure, value: Double(min(max(pressure, 0), 1)))
-        event.setDoubleValueField(.tabletEventTiltX, value: Double(min(max(tiltX, -1), 1)))
-        event.setDoubleValueField(.tabletEventTiltY, value: Double(min(max(tiltY, -1), 1)))
+        event.setDoubleValueField(.tabletEventPointPressure, value: Double(min(max(attributes.pressure, 0), 1)))
+        event.setDoubleValueField(.tabletEventTiltX, value: Double(min(max(attributes.tiltX, -1), 1)))
+        event.setDoubleValueField(.tabletEventTiltY, value: Double(min(max(attributes.tiltY, -1), 1)))
         event.setIntegerValueField(.tabletEventDeviceID, value: 1)
-        event.setIntegerValueField(.tabletProximityEventPointerType, value: (flags & 16) != 0 ? 3 : 1)
+        event.setIntegerValueField(.tabletProximityEventPointerType, value: (attributes.flags & 16) != 0 ? 3 : 1)
         event.post(tap: .cghidEventTap)
     }
 
     private func releaseStylusIfNeeded(at point: CGPoint) {
         if primaryStylusDown {
-            injectTabletPoint(at: point, type: .leftMouseUp, pressure: 0,
-                              tiltX: lastStylusTiltX, tiltY: lastStylusTiltY, flags: 1)
+            injectTabletPoint(
+                at: point,
+                type: .leftMouseUp,
+                attributes: TabletPointAttributes(
+                    pressure: 0,
+                    tiltX: lastStylusTiltX,
+                    tiltY: lastStylusTiltY,
+                    flags: 1,
+                ),
+            )
         }
         primaryStylusDown = false
         stylusPrimaryButtonPressed = false
