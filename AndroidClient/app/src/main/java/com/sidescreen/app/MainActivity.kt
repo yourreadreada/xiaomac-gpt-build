@@ -1708,7 +1708,7 @@ class MainActivity : AppCompatActivity() {
 
             if (
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                    (event.flags and MotionEvent.FLAG_CANCELED) != 0
+                (event.flags and MotionEvent.FLAG_CANCELED) != 0
             ) {
                 streamClient?.sendStylus(
                     stylusX(view, event.getX(i)),
@@ -1989,7 +1989,7 @@ class MainActivity : AppCompatActivity() {
             } ?: return false
         if (
             event.actionMasked != MotionEvent.ACTION_BUTTON_PRESS &&
-                event.actionMasked != MotionEvent.ACTION_BUTTON_RELEASE
+            event.actionMasked != MotionEvent.ACTION_BUTTON_RELEASE
         ) {
             return false
         }
