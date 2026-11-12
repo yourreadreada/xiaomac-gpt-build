@@ -14,10 +14,6 @@
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
-    <key>SUPublicEDKey</key>
-    <string>7bJdS/tTNvOEUEobUTrH7IxJsg/FBZcmSHyzY4ZU97I=</string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>
