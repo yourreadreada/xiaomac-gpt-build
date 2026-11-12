@@ -1,0 +1,70 @@
+name: XiaoMac build
+
+on:
+  push:
+    branches:
+      - "xiaomac/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-package:
+    name: Build macOS app + Android APK
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Check out XiaoMac
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build Android debug APK
+        working-directory: AndroidClient
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug
+
+      - name: Build universal macOS app
+        run: |
+          chmod +x ./scripts/build_mac.sh
+          ./scripts/build_mac.sh
+
+      - name: Assemble distribution folder
+        run: |
+          mkdir -p dist/XiaoMac
+          cp -R XiaoMac.app dist/XiaoMac/XiaoMac.app
+          cp AndroidClient/app/build/outputs/apk/debug/app-debug.apk dist/XiaoMac/XiaoMac-Android-debug.apk
+          cat > dist/XiaoMac/BUILD-INFO.txt <<'EOF'
+          XiaoMac development build
+
+          macOS: XiaoMac.app (Universal Apple Silicon + Intel)
+          Android: XiaoMac-Android-debug.apk (debug-signed, sideload build)
+
+          This is an experimental fork of Side Screen. The stylus input path still
+          requires validation on the target Xiaomi Pad 5 and Xiaomi Smart Pen 2nd Gen.
+
+          macOS first launch: the development app is ad-hoc signed, not notarized.
+          Use Finder > right-click XiaoMac.app > Open on first launch if Gatekeeper
+          blocks it. Grant Screen Recording and Accessibility permissions when asked.
+          EOF
+
+      - name: Upload XiaoMac distribution ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: XiaoMac-DevBuild
+          path: dist/XiaoMac/
+          if-no-files-found: error
+          retention-days: 14
