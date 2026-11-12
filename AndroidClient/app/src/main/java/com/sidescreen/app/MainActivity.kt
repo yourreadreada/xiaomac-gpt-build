@@ -389,11 +389,13 @@ class MainActivity : AppCompatActivity() {
             true
         }
         binding.surfaceView.setOnHoverListener { view, event -> handleStylusHover(view, event) }
+        binding.surfaceView.setOnGenericMotionListener { view, event -> handleStylusGenericMotion(view, event) }
         binding.textureView.setOnTouchListener { view, event ->
             if (demoActive) showDemoTouchHint(event) else handleTouch(view, event)
             true
         }
         binding.textureView.setOnHoverListener { view, event -> handleStylusHover(view, event) }
+        binding.textureView.setOnGenericMotionListener { view, event -> handleStylusGenericMotion(view, event) }
     }
 
     private fun setupUI() {
@@ -1694,20 +1696,24 @@ class MainActivity : AppCompatActivity() {
         }
         if (stylusIndex != null) {
             val i = stylusIndex
-            val x = (event.getX(i) / view.width.toFloat()).coerceIn(0f, 1f)
-            val y = (event.getY(i) / view.height.toFloat()).coerceIn(0f, 1f)
+            val rawX = event.getX(i) / view.width.toFloat()
+            val rawY = event.getY(i) / view.height.toFloat()
+            val x = (if (displayFlipHorizontal) 1f - rawX else rawX).coerceIn(0f, 1f)
+            val y = (if (displayFlipVertical) 1f - rawY else rawY).coerceIn(0f, 1f)
             val pressure = event.getPressure(i).coerceIn(0f, 1f)
-            val tilt = event.getAxisValue(MotionEvent.AXIS_TILT, i).coerceIn(0f, 1f)
+            val tiltRadians = event.getAxisValue(MotionEvent.AXIS_TILT, i)
+                .coerceIn(0f, (Math.PI / 2).toFloat())
+            val tilt = kotlin.math.sin(tiltRadians)
             val buttonState = event.buttonState
             val flags = 1 or ((buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0).let { if (it) 4 else 0 } or
                 ((buttonState and MotionEvent.BUTTON_STYLUS_SECONDARY) != 0).let { if (it) 8 else 0 }
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN ->
-                    streamClient?.sendTouch(x, y, 0, pressure = pressure, tilt = tilt, flags = flags)
+                    streamClient?.sendStylus(x, y, 0, pressure = pressure, tilt = tilt, flags = flags)
                 MotionEvent.ACTION_MOVE ->
-                    streamClient?.sendTouch(x, y, 1, pressure = pressure, tilt = tilt, flags = flags)
+                    streamClient?.sendStylus(x, y, 1, pressure = pressure, tilt = tilt, flags = flags)
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL ->
-                    streamClient?.sendTouch(x, y, 2, pressure = 0f, tilt = tilt, flags = flags)
+                    streamClient?.sendStylus(x, y, 2, pressure = 0f, tilt = tilt, flags = flags)
             }
             return
         }
@@ -1763,6 +1769,28 @@ class MainActivity : AppCompatActivity() {
                 streamClient?.sendTouch(x, y, 4, pressure = 0f, tilt = tilt, flags = 1 or 2)
             else -> return false
         }
+        return true
+    }
+
+    private fun handleStylusGenericMotion(view: View, event: MotionEvent): Boolean {
+        if (event.pointerCount == 0 || event.getToolType(0) != MotionEvent.TOOL_TYPE_STYLUS) return false
+        if (event.actionMasked != MotionEvent.ACTION_BUTTON_PRESS &&
+            event.actionMasked != MotionEvent.ACTION_BUTTON_RELEASE
+        ) return false
+
+        val rawX = event.x / view.width.toFloat()
+        val rawY = event.y / view.height.toFloat()
+        val x = (if (displayFlipHorizontal) 1f - rawX else rawX).coerceIn(0f, 1f)
+        val y = (if (displayFlipVertical) 1f - rawY else rawY).coerceIn(0f, 1f)
+        val pressure = event.getPressure(0).coerceIn(0f, 1f)
+        val tiltRadians = event.getAxisValue(MotionEvent.AXIS_TILT, 0)
+            .coerceIn(0f, (Math.PI / 2).toFloat())
+        val tilt = kotlin.math.sin(tiltRadians)
+        val buttonState = event.buttonState
+        val flags = 1 or
+            (if ((buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0) 4 else 0) or
+            (if ((buttonState and MotionEvent.BUTTON_STYLUS_SECONDARY) != 0) 8 else 0)
+        streamClient?.sendStylus(x, y, 1, pressure, tilt, flags)
         return true
     }
 
