@@ -28,6 +28,7 @@ class StreamClient(
     private var inputStream: DataInputStream? = null
     private var outputStream: java.io.DataOutputStream? = null
     private var isConnected = false
+    @Volatile private var stylusSupportedByHost = false
 
     // Callback includes actual frame size (may differ from buffer.size due to pooling),
     // receive timestamp, and whether the frame can restart HEVC decoding.
@@ -130,11 +131,14 @@ class StreamClient(
                 outputStream = java.io.DataOutputStream(socket?.getOutputStream())
                 streamCodecIsHevc = true
                 codecNegotiated = false
+                stylusSupportedByHost = false
+                stylusSupportedByHost = false
                 prepareAdvertisements()
                 advertiseAvcOnlyIfNeeded() // MUST precede type 8: type 8 can trigger the server's early protocol finish
                 advertiseDecoderLimits() // Also before type 8, for the same reason
                 advertiseDesktopGeometrySupport() // Likewise
                 advertiseIdentity() // Likewise: the Mac picks this tablet's profile when type 8 lands
+                advertiseStylusSupport() // Payload-free opt-in; the host acknowledges before pen frames are sent
                 advertiseFrameMetadataSupport()
                 isConnected = true
                 lastKeyframeReceivedNs = 0L
@@ -361,6 +365,7 @@ class StreamClient(
                 advertiseDecoderLimits() // Also before type 8, for the same reason
                 advertiseDesktopGeometrySupport() // Likewise
                 advertiseIdentity() // Likewise: the Mac picks this tablet's profile when type 8 lands
+                advertiseStylusSupport() // Payload-free opt-in; the host acknowledges before pen frames are sent
                 advertiseFrameMetadataSupport()
                 isConnected = true
                 diagLog("Wireless connected to $host:$port")
@@ -389,6 +394,14 @@ class StreamClient(
             out.writeByte(MESSAGE_CLIENT_SUPPORTS_DESKTOP_GEOMETRY)
             out.flush()
             diagLog("Advertised desktop-geometry support")
+        }
+    }
+
+    private fun advertiseStylusSupport() {
+        outputStream?.let { out ->
+            out.writeByte(MESSAGE_CLIENT_SUPPORTS_STYLUS)
+            out.flush()
+            diagLog("Advertised stylus support")
         }
     }
 
@@ -528,6 +541,11 @@ class StreamClient(
                             onDesktopSize?.invoke(dw, dh)
                         }
 
+                        MESSAGE_STYLUS_SUPPORTED -> {
+                            stylusSupportedByHost = true
+                            diagLog("Host supports XiaoMac stylus input")
+                        }
+
                         MESSAGE_CODEC_SELECTED -> {
                             val codecId = input.readByte().toInt()
                             streamCodecIsHevc = codecId == 0
@@ -599,7 +617,7 @@ class StreamClient(
         tilt: Float = 0f,
         flags: Int = 1,
     ) {
-        if (!isConnected) return
+        if (!isConnected || !stylusSupportedByHost) return
         touchScope.launch {
             try {
                 socket?.getOutputStream()?.let { out ->
@@ -769,12 +787,14 @@ class StreamClient(
 
     fun disconnect() {
         isConnected = false
+        stylusSupportedByHost = false
         cleanup()
         onConnectionStatus?.invoke(false)
         Log.d(TAG, "Disconnected")
     }
 
     private fun cleanup() {
+        stylusSupportedByHost = false
         try {
             outputStream?.close()
             inputStream?.close()
@@ -822,6 +842,8 @@ class StreamClient(
         private const val MESSAGE_DESKTOP_GEOMETRY = 13
         private const val MESSAGE_CLIENT_DECODER_LIMIT_TABLE = 14
         private const val MESSAGE_CLIENT_IDENTITY = 18 // 15–17 reserved
+        private const val MESSAGE_CLIENT_SUPPORTS_STYLUS = 20
+        private const val MESSAGE_STYLUS_SUPPORTED = 21
         private const val FRAME_FLAG_KEYFRAME = 1
         private const val KEYFRAME_REQUEST_FLAG_FORCE = 1
 
