@@ -28,9 +28,12 @@ class StreamClient(
     private var inputStream: DataInputStream? = null
     private var outputStream: java.io.DataOutputStream? = null
     private var isConnected = false
+
     @Volatile private var stylusSupportedByHost = false
+
     @Volatile var remotePrimaryButtonAction: Int = 1
         private set
+
     @Volatile var remoteSecondaryButtonAction: Int = 0
         private set
 
@@ -552,7 +555,10 @@ class StreamClient(
                         MESSAGE_STYLUS_BUTTON_CONFIG -> {
                             remotePrimaryButtonAction = input.readUnsignedByte()
                             remoteSecondaryButtonAction = input.readUnsignedByte()
-                            diagLog("Pen button config: primary=$remotePrimaryButtonAction secondary=$remoteSecondaryButtonAction")
+                            diagLog(
+                                "Pen button config: " +
+                                    "primary=$remotePrimaryButtonAction secondary=$remoteSecondaryButtonAction",
+                            )
                         }
 
                         MESSAGE_CODEC_SELECTED -> {
