@@ -3,7 +3,7 @@ name: XiaoMac build
 on:
   push:
     branches:
-      - "xiaomac/**"
+      - main
   pull_request:
     branches:
       - main
@@ -36,6 +36,12 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon testDebugUnitTest assembleDebug
+
+      - name: Lint Swift
+        run: |
+          brew install swiftlint
+          cd MacHost
+          swiftlint lint --config .swiftlint.yml --strict
 
       - name: Build universal macOS app
         run: |
