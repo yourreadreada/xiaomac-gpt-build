@@ -648,6 +648,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             streamingServer?.onClientDisconnected = { [weak self] in
                 guard let self = self else { return }
                 Task { @MainActor in
+                    self.releaseStylusIfNeeded(at: self.touchLastPosition)
                     self.settings.clientConnected = false
                     self.closeActiveProfile()
                     // Final lastConnected snapshot at the disconnect moment, then
@@ -663,6 +664,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             streamingServer?.onTouchEvent = { [weak self] x, y, action, pointerCount, x2, y2 in
                 self?.handleTouch(x: x, y: y, action: action, pointerCount: pointerCount, x2: x2, y2: y2)
+            }
+
+            streamingServer?.onStylusEvent = { [weak self] x, y, action, pressure, tilt, flags in
+                self?.handleTouch(x: x, y: y, action: action, pointerCount: 1,
+                                  pressure: pressure, tilt: tilt, flags: flags | 1)
             }
 
             streamingServer?.onStats = { [weak self] fps, mbps in
@@ -916,6 +922,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func stopServer() {
+        releaseStylusIfNeeded(at: touchLastPosition)
         tearDownServerResources(saveDisplayPosition: true)
         syncCurrentProfile()
         activeProfileKey = nil
@@ -960,6 +967,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastStylusPressure: Float = 0
     private var lastStylusTilt: Float = 0
     private var primaryStylusDown = false
+    private var stylusPrimaryButtonPressed = false
+    private var stylusSecondaryButtonPressed = false
 
     func handleTouch(x: Float, y: Float, action: Int, pointerCount: Int = 1,
                      x2: Float = 0, y2: Float = 0, pressure: Float = 0, tilt: Float = 0, flags: Int = 0) {
@@ -983,6 +992,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard settings.stylusEnabled else { return }
             lastStylusPressure = min(max(pressure, 0), 1)
             lastStylusTilt = min(max(tilt, 0), 1)
+            handleStylusButtons(flags: flags, at: p1)
             if (flags & 2) != 0 {
                 if action == 3 { moveCursor(to: p1) }
                 return
@@ -1020,6 +1030,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func injectTabletPoint(at point: CGPoint, type: CGEventType, pressure: Float, tilt: Float) {
         guard let event = CGEvent(mouseEventSource: eventSource, mouseType: type,
                                   mouseCursorPosition: point, mouseButton: .left) else { return }
+        // NX_SUBTYPE_TABLET_POINT is 1; this marks the synthetic event as a tablet point
+        // so drawing applications can read pressure/tilt rather than seeing only a mouse.
         event.setIntegerValueField(.mouseEventSubtype, value: 1)
         event.setDoubleValueField(.tabletEventPointPressure, value: Double(pressure))
         event.setDoubleValueField(.tabletEventTiltX, value: Double(tilt))
@@ -1032,6 +1044,58 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         injectTabletPoint(at: point, type: .leftMouseUp, pressure: 0, tilt: lastStylusTilt)
         primaryStylusDown = false
         gestureState = .idle
+    }
+
+    private func handleStylusButtons(flags: Int, at point: CGPoint) {
+        let primaryNow = (flags & 4) != 0
+        let secondaryNow = (flags & 8) != 0
+
+        if primaryNow && !stylusPrimaryButtonPressed {
+            switch settings.stylusPrimaryAction {
+            case "brushEraser":
+                // E is the common brush/eraser toggle shortcut; the receiving app can
+                // override this mapping in XiaoMac settings in a later iteration.
+                injectKeyPress(keyCode: 14)
+            default:
+                break
+            }
+        }
+
+        if secondaryNow && !stylusSecondaryButtonPressed {
+            switch settings.stylusSecondaryAction {
+            case "rightClick":
+                injectRightClick(at: point)
+            case "systemDefault", "none":
+                // System Default deliberately does not synthesize an event. This leaves
+                // Xiaomi's native screenshot mapping alone.
+                break
+            default:
+                break
+            }
+        }
+
+        stylusPrimaryButtonPressed = primaryNow
+        stylusSecondaryButtonPressed = secondaryNow
+    }
+
+    private func injectKeyPress(keyCode: CGKeyCode) {
+        guard
+            let down = CGEvent(keyboardEventSource: eventSource, virtualKey: keyCode, keyDown: true),
+            let up = CGEvent(keyboardEventSource: eventSource, virtualKey: keyCode, keyDown: false)
+        else { return }
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+    }
+
+    private func injectRightClick(at point: CGPoint) {
+        guard
+            let down = CGEvent(mouseEventSource: eventSource, mouseType: .rightMouseDown,
+                               mouseCursorPosition: point, mouseButton: .right),
+            let up = CGEvent(mouseEventSource: eventSource, mouseType: .rightMouseUp,
+                             mouseCursorPosition: point, mouseButton: .right)
+        else { return }
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
     }
 
     // MARK: - 1-Finger Gesture State Machine
