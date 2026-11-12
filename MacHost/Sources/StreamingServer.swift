@@ -40,6 +40,8 @@ private enum WireMessage {
     /// BEFORE type 8, so the host knows which profile to apply before the
     /// display config goes out.
     static let clientIdentity: UInt8 = 18
+    static let clientSupportsStylus: UInt8 = 20
+    static let stylusSupported: UInt8 = 21
     /// Client→server, fixed 21-byte payload: normalized x/y, action, pressure, tilt, button flags.
     static let stylusEvent: UInt8 = 19
 }
@@ -256,6 +258,7 @@ class StreamingServer {
     private(set) var clientDecodeLimitTable: [Int: (width: Int, height: Int)]?
     /// Set when the client opts in via type 12. Gates desktopGeometry sends.
     private var clientSupportsDesktopGeometry = false
+    private var clientSupportsStylus = false
     /// Type 18 identity of the connected client, if it sent one.
     private var clientIdentity: DeviceIdentity?
     /// Name from the wireless auth handshake (nil over USB).
@@ -373,6 +376,7 @@ class StreamingServer {
         clientDecodeLimits = nil
         clientDecodeLimitTable = nil
         clientSupportsDesktopGeometry = false
+        clientSupportsStylus = false
         clientIdentity = nil
         handshakeDeviceName = nil
         startupPrepared = false
@@ -732,13 +736,22 @@ class StreamingServer {
                 }
 
             case WireMessage.stylusEvent:
-                // Fixed 21-byte payload after the type: x, y, action, pressure, tilt, flags.
+                // Only a client that received our capability acknowledgement may send type 19.
                 guard inputBuffer.count >= 22 else { return }
                 let message = Data(inputBuffer.prefix(22))
                 consumeInputBytes(22)
-                if touchEnabled {
+                if touchEnabled && clientSupportsStylus {
                     handleStylusMessage(message)
                 }
+
+            case WireMessage.clientSupportsStylus:
+                // Payload-free opt-in. Older clients never receive the response because
+                // they do not send this request; older hosts safely skip this one byte.
+                consumeInputBytes(1)
+                clientSupportsStylus = true
+                connection.send(content: Data([WireMessage.stylusSupported]),
+                                completion: .contentProcessed { _ in })
+                debugLog("Client supports XiaoMac stylus input")
 
             case WireMessage.ping:
                 // Ping from client: echo back as pong (type=5) with client's timestamp.
