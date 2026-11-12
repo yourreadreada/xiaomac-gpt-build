@@ -2,16 +2,17 @@ import Cocoa
 import SwiftUI
 import Combine
 import ApplicationServices
+import IOKit
 import os.log
 @preconcurrency import ScreenCaptureKit
 
-// Debug file logger - writes to /tmp/sidescreen.log
+// Debug file logger - writes to /tmp/xiaomac.log
 func debugLog(_ message: String) {
     let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
     let line = "[\(timestamp)] \(message)\n"
     print(message)
     if let data = line.data(using: .utf8) {
-        let url = URL(fileURLWithPath: "/tmp/sidescreen.log")
+        let url = URL(fileURLWithPath: "/tmp/xiaomac.log")
         if let handle = try? FileHandle(forWritingTo: url) {
             handle.seekToEndOfFile()
             handle.write(data)
@@ -30,6 +31,7 @@ enum GestureState {
     case scrolling        // 1-finger scroll
     case longPressReady   // Long press detected, waiting for drag or release
     case dragging         // Long press + drag (left mouse drag)
+    case penDrawing       // Direct stylus stroke
     case twoFingerScroll  // 2-finger scroll
     case pinching         // Pinch zoom
 }
@@ -43,6 +45,13 @@ struct GestureThresholds {
     static let scrollSensitivity: CGFloat = 1.2
     static let pinchMinDistance: CGFloat = 20
     static let minTouchInterval: UInt64 = 8_000_000    // ~120Hz
+}
+
+private struct TabletPointAttributes {
+    let pressure: Float
+    let tiltX: Float
+    let tiltY: Float
+    let flags: Int
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -265,7 +274,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$touchEnabled
             .dropFirst()
             .sink { [weak self] enabled in
-                self?.streamingServer?.touchEnabled = enabled
+                guard let self else { return }
+                self.streamingServer?.touchEnabled = enabled
+                if !enabled { self.releaseStylusIfNeeded(at: self.touchLastPosition) }
+            }
+            .store(in: &cancellables)
+
+        settings.$stylusEnabled
+            .dropFirst()
+            .sink { [weak self] enabled in
+                guard let self else { return }
+                if !enabled { self.releaseStylusIfNeeded(at: self.touchLastPosition) }
+            }
+            .store(in: &cancellables)
+
+        Publishers.CombineLatest(settings.$stylusPrimaryAction, settings.$stylusSecondaryAction)
+            .dropFirst()
+            .sink { [weak self] primary, secondary in
+                self?.streamingServer?.updateStylusButtonActions(
+                    primary: primary == "brushEraser" ? 1 : 0,
+                    secondary: secondary == "rightClick" ? 3 : (secondary == "none" ? 2 : 0)
+                )
             }
             .store(in: &cancellables)
 
@@ -339,7 +368,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "display.2", accessibilityDescription: "Side Screen")
+            button.image = NSImage(systemSymbolName: "display.2", accessibilityDescription: "XiaoMac")
         }
 
         // Items are rebuilt on every open (menuNeedsUpdate) so the menu always
@@ -596,6 +625,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // Setup server
             streamingServer = StreamingServer(port: settings.port)
             streamingServer?.touchEnabled = settings.touchEnabled
+            streamingServer?.updateStylusButtonActions(
+                primary: settings.stylusPrimaryAction == "brushEraser" ? 1 : 0,
+                secondary: settings.stylusSecondaryAction == "rightClick" ? 3 :
+                    (settings.stylusSecondaryAction == "none" ? 2 : 0)
+            )
             if settings.connectionMode == .wireless {
                 streamingServer?.expectedAuthToken = WirelessAuth.loadOrCreate()
                 configurePairingCode(on: streamingServer)
@@ -646,6 +680,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             streamingServer?.onClientDisconnected = { [weak self] in
                 guard let self = self else { return }
                 Task { @MainActor in
+                    self.releaseStylusIfNeeded(at: self.touchLastPosition)
                     self.settings.clientConnected = false
                     self.closeActiveProfile()
                     // Final lastConnected snapshot at the disconnect moment, then
@@ -661,6 +696,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             streamingServer?.onTouchEvent = { [weak self] x, y, action, pointerCount, x2, y2 in
                 self?.handleTouch(x: x, y: y, action: action, pointerCount: pointerCount, x2: x2, y2: y2)
+            }
+
+            streamingServer?.onStylusEvent = { [weak self] x, y, action, pressure, tiltX, tiltY, flags in
+                self?.handleTouch(x: x, y: y, action: action, pointerCount: 1,
+                                  pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags | 1)
             }
 
             streamingServer?.onStats = { [weak self] fps, mbps in
@@ -708,7 +748,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             height: size.height,
             refreshRate: settings.refreshRate,
             hiDPI: settings.hiDPI,
-            name: "SideScreen"
+            name: "XiaoMac"
         )
 
         // Disable mirror mode (may fail if already in extend mode)
@@ -914,6 +954,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func stopServer() {
+        releaseStylusIfNeeded(at: touchLastPosition)
         tearDownServerResources(saveDisplayPosition: true)
         syncCurrentProfile()
         activeProfileKey = nil
@@ -955,37 +996,173 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Touch Entry Point
 
-    func handleTouch(x: Float, y: Float, action: Int, pointerCount: Int = 1, x2: Float = 0, y2: Float = 0) {
-        guard settings.touchEnabled else { return }
+    private var lastStylusPressure: Float = 0
+    private var lastStylusTiltX: Float = 0
+    private var lastStylusTiltY: Float = 0
+    private var primaryStylusDown = false
+    private var stylusPrimaryButtonPressed = false
+    private var stylusSecondaryButtonPressed = false
+    private var stylusEraserToggleActive = false
 
+    func handleTouch(x: Float, y: Float, action: Int, pointerCount: Int = 1,
+                     x2: Float = 0, y2: Float = 0, pressure: Float = 0,
+                     tiltX: Float = 0, tiltY: Float = 0, flags: Int = 0) {
+        guard settings.touchEnabled else { return }
         if !AXIsProcessTrusted() {
             if !accessibilityWarningShown {
                 accessibilityWarningShown = true
-                print("⚠️  Accessibility not granted - touch ignored")
-                Task { @MainActor in
-                    settings.hasAccessibilityPermission = false
-                }
+                debugLog("Accessibility not granted - touch ignored")
+                Task { @MainActor in settings.hasAccessibilityPermission = false }
             }
             return
         }
-
         guard let displayID = virtualDisplayManager?.displayID else { return }
         let bounds = CGDisplayBounds(displayID)
+        let p1 = CGPoint(x: bounds.origin.x + CGFloat(x) * bounds.width,
+                         y: bounds.origin.y + CGFloat(y) * bounds.height)
+        let p2 = CGPoint(x: bounds.origin.x + CGFloat(x2) * bounds.width,
+                         y: bounds.origin.y + CGFloat(y2) * bounds.height)
 
-        let p1 = CGPoint(
-            x: bounds.origin.x + CGFloat(x) * bounds.width,
-            y: bounds.origin.y + CGFloat(y) * bounds.height
-        )
-        let p2 = CGPoint(
-            x: bounds.origin.x + CGFloat(x2) * bounds.width,
-            y: bounds.origin.y + CGFloat(y2) * bounds.height
-        )
+        if (flags & 1) != 0 {
+            guard settings.stylusEnabled else { return }
+            lastStylusPressure = min(max(pressure, 0), 1)
+            lastStylusTiltX = min(max(tiltX, -1), 1)
+            lastStylusTiltY = min(max(tiltY, -1), 1)
+            handleStylusButtons(flags: flags, at: p1)
+            if (flags & 2) != 0 {
+                if action == 3 {
+                    moveCursor(to: p1)
+                    injectTabletPoint(
+                        at: p1,
+                        type: .mouseMoved,
+                        attributes: TabletPointAttributes(pressure: 0, tiltX: tiltX, tiltY: tiltY, flags: flags),
+                    )
+                }
+                return
+            }
+            switch action {
+            case 0:
+                releaseStylusIfNeeded(at: p1)
+                touchStartPosition = p1
+                touchLastPosition = p1
+                gestureState = .penDrawing
+                primaryStylusDown = true
+                moveCursor(to: p1)
+                injectTabletPoint(
+                    at: p1,
+                    type: .leftMouseDown,
+                    attributes: TabletPointAttributes(pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags),
+                )
+            case 1:
+                guard primaryStylusDown else { return }
+                injectTabletPoint(
+                    at: p1,
+                    type: .leftMouseDragged,
+                    attributes: TabletPointAttributes(pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags),
+                )
+                touchLastPosition = p1
+            case 2, 4:
+                guard primaryStylusDown else { return }
+                injectTabletPoint(
+                    at: p1,
+                    type: .leftMouseUp,
+                    attributes: TabletPointAttributes(pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags),
+                )
+                primaryStylusDown = false
+                gestureState = .idle
+            default: break
+            }
+            return
+        }
 
         if pointerCount >= 2 {
             handleTwoFingerTouch(p1: p1, p2: p2, action: action)
         } else {
             handleOneFingerTouch(at: p1, action: action)
         }
+    }
+
+    private func injectTabletPoint(at point: CGPoint, type: CGEventType, attributes: TabletPointAttributes) {
+        guard let event = CGEvent(mouseEventSource: eventSource, mouseType: type,
+                                  mouseCursorPosition: point, mouseButton: .left) else { return }
+        event.setIntegerValueField(.mouseEventSubtype, value: Int64(CGEventMouseSubtype.tabletPoint.rawValue))
+        event.setDoubleValueField(.tabletEventPointPressure, value: Double(min(max(attributes.pressure, 0), 1)))
+        event.setDoubleValueField(.tabletEventTiltX, value: Double(min(max(attributes.tiltX, -1), 1)))
+        event.setDoubleValueField(.tabletEventTiltY, value: Double(min(max(attributes.tiltY, -1), 1)))
+        event.setIntegerValueField(.tabletEventDeviceID, value: 1)
+        event.setIntegerValueField(.tabletProximityEventPointerType, value: (attributes.flags & 16) != 0 ? 3 : 1)
+        event.post(tap: .cghidEventTap)
+    }
+
+    private func releaseStylusIfNeeded(at point: CGPoint) {
+        if primaryStylusDown {
+            injectTabletPoint(
+                at: point,
+                type: .leftMouseUp,
+                attributes: TabletPointAttributes(
+                    pressure: 0,
+                    tiltX: lastStylusTiltX,
+                    tiltY: lastStylusTiltY,
+                    flags: 1,
+                ),
+            )
+        }
+        primaryStylusDown = false
+        stylusPrimaryButtonPressed = false
+        stylusSecondaryButtonPressed = false
+        if gestureState == .penDrawing { gestureState = .idle }
+    }
+
+    private func handleStylusButtons(flags: Int, at point: CGPoint) {
+        let primaryNow = (flags & 4) != 0
+        let secondaryNow = (flags & 8) != 0
+
+        if primaryNow && !stylusPrimaryButtonPressed {
+            switch settings.stylusPrimaryAction {
+            case "brushEraser":
+                stylusEraserToggleActive.toggle()
+                // B selects brush; E selects eraser in common drawing applications.
+                injectKeyPress(keyCode: stylusEraserToggleActive ? 14 : 11)
+            default:
+                break
+            }
+        }
+
+        if secondaryNow && !stylusSecondaryButtonPressed {
+            switch settings.stylusSecondaryAction {
+            case "rightClick":
+                injectRightClick(at: point)
+            case "systemDefault", "none":
+                // System Default deliberately does not synthesize an event. This leaves
+                // Xiaomi's native screenshot mapping alone.
+                break
+            default:
+                break
+            }
+        }
+
+        stylusPrimaryButtonPressed = primaryNow
+        stylusSecondaryButtonPressed = secondaryNow
+    }
+
+    private func injectKeyPress(keyCode: CGKeyCode) {
+        guard
+            let down = CGEvent(keyboardEventSource: eventSource, virtualKey: keyCode, keyDown: true),
+            let up = CGEvent(keyboardEventSource: eventSource, virtualKey: keyCode, keyDown: false)
+        else { return }
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+    }
+
+    private func injectRightClick(at point: CGPoint) {
+        guard
+            let down = CGEvent(mouseEventSource: eventSource, mouseType: .rightMouseDown,
+                               mouseCursorPosition: point, mouseButton: .right),
+            let up = CGEvent(mouseEventSource: eventSource, mouseType: .rightMouseUp,
+                             mouseCursorPosition: point, mouseButton: .right)
+        else { return }
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
     }
 
     // MARK: - 1-Finger Gesture State Machine
@@ -1387,6 +1564,6 @@ extension AppDelegate: NSMenuDelegate {
         menu.addItem(settingsItem)
 
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Side Screen", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit XiaoMac", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 }

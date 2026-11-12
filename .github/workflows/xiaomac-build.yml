@@ -1,0 +1,105 @@
+name: XiaoMac build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out XiaoMac
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Build and test Android client
+        working-directory: AndroidClient
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug
+
+      - name: Lint Kotlin
+        working-directory: AndroidClient
+        run: |
+          curl -sSLO https://github.com/pinterest/ktlint/releases/download/1.1.1/ktlint
+          chmod a+x ktlint
+          ./ktlint "app/src/main/java/**/*.kt"
+
+      - name: Upload XiaoMac Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: XiaoMac-Android-debug
+          path: AndroidClient/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  build-macos-and-package:
+    name: Build universal Mac app + package bundle
+    needs: build-android
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - name: Check out XiaoMac
+        uses: actions/checkout@v4
+
+      - name: Lint Swift
+        run: |
+          brew install swiftlint
+          cd MacHost
+          swiftlint lint --config .swiftlint.yml --strict
+
+      - name: Build universal macOS app
+        run: |
+          chmod +x ./scripts/build_mac.sh
+          ./scripts/build_mac.sh
+
+      - name: Download Android APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: XiaoMac-Android-debug
+          path: artifacts/android
+
+      - name: Assemble distribution folder
+        run: |
+          mkdir -p dist/XiaoMac
+          cp -R XiaoMac.app dist/XiaoMac/XiaoMac.app
+          cp XiaoMac-*-mac-universal.dmg dist/XiaoMac/XiaoMac-mac-universal.dmg
+          cp artifacts/android/app-debug.apk dist/XiaoMac/XiaoMac-Android-debug.apk
+          cat > dist/XiaoMac/BUILD-INFO.txt <<'EOF'
+          XiaoMac development build
+
+          macOS: XiaoMac.app (Universal Apple Silicon + Intel)
+          macOS installer: XiaoMac-mac-universal.dmg
+          Android: XiaoMac-Android-debug.apk (debug-signed, sideload build)
+
+          This is an experimental fork of Side Screen. The stylus input path still
+          requires validation on the target Xiaomi Pad 5 and Xiaomi Smart Pen 2nd Gen.
+
+          macOS first launch: the development app is ad-hoc signed, not notarized.
+          Use Finder > right-click XiaoMac.app > Open on first launch if Gatekeeper
+          blocks it. Grant Screen Recording and Accessibility permissions when asked.
+          EOF
+
+      - name: Upload XiaoMac distribution ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: XiaoMac-Bundle
+          path: dist/XiaoMac/
+          if-no-files-found: error
+          retention-days: 14

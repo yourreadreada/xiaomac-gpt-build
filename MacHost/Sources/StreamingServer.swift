@@ -40,6 +40,11 @@ private enum WireMessage {
     /// BEFORE type 8, so the host knows which profile to apply before the
     /// display config goes out.
     static let clientIdentity: UInt8 = 18
+    static let clientSupportsStylus: UInt8 = 20
+    static let stylusSupported: UInt8 = 21
+    static let stylusButtonConfig: UInt8 = 22
+    /// Client→server, fixed 25-byte payload after the type byte (26 bytes total): normalized x/y, action, pressure, tiltX/Y, button flags.
+    static let stylusEvent: UInt8 = 19
 }
 
 private extension String {
@@ -168,8 +173,10 @@ class StreamingServer {
     /// config is sent, for every outcome (.hevc or .h264) — so the capture
     /// pipeline can also revert to HEVC after an AVC-only client goes away.
     var onCodecNegotiated: ((StreamCodec) -> Void)?
-    // Touch callback: (x1, y1, action, pointerCount, x2, y2)
+    // Legacy touch callback remains wire-compatible with existing clients.
     var onTouchEvent: ((Float, Float, Int, Int, Float, Float) -> Void)?
+    // Dedicated stylus callback: normalized x/y, action, pressure, tilt, button flags.
+    var onStylusEvent: ((Float, Float, Int, Float, Float, Float, Int) -> Void)?
     var onStats: ((Double, Double) -> Void)?
     var onKeyframeRequested: ((Bool) -> Void)?
     // Whether host wants to receive touch events from client. Ping/pong is
@@ -252,6 +259,9 @@ class StreamingServer {
     private(set) var clientDecodeLimitTable: [Int: (width: Int, height: Int)]?
     /// Set when the client opts in via type 12. Gates desktopGeometry sends.
     private var clientSupportsDesktopGeometry = false
+    private var clientSupportsStylus = false
+    private var stylusPrimaryButtonAction: UInt8 = 1
+    private var stylusSecondaryButtonAction: UInt8 = 0
     /// Type 18 identity of the connected client, if it sent one.
     private var clientIdentity: DeviceIdentity?
     /// Name from the wireless auth handshake (nil over USB).
@@ -369,6 +379,7 @@ class StreamingServer {
         clientDecodeLimits = nil
         clientDecodeLimitTable = nil
         clientSupportsDesktopGeometry = false
+        clientSupportsStylus = false
         clientIdentity = nil
         handshakeDeviceName = nil
         startupPrepared = false
@@ -455,8 +466,23 @@ class StreamingServer {
         debugLog("Client connected - sending display config first")
         sendDisplaySize()
         connectionReady = true
+        sendStylusButtonConfigIfSupported()
         debugLog("Connection ready for frames (metadata=\(clientSupportsFrameMetadata ? "on" : "off"), codec=\(codec))")
         onClientConnected?()
+    }
+
+    func updateStylusButtonActions(primary: UInt8, secondary: UInt8) {
+        stylusPrimaryButtonAction = primary
+        stylusSecondaryButtonAction = secondary
+        sendStylusButtonConfigIfSupported()
+    }
+
+    private func sendStylusButtonConfigIfSupported() {
+        guard clientSupportsStylus, connectionReady, let connection else { return }
+        connection.send(
+            content: Data([WireMessage.stylusButtonConfig, stylusPrimaryButtonAction, stylusSecondaryButtonAction]),
+            completion: .contentProcessed { _ in }
+        )
     }
 
     private func runAuthHandshake(connection conn: NWConnection, expectedToken: Data) {
@@ -711,28 +737,40 @@ class StreamingServer {
         while let msgType = inputBuffer.first {
             switch msgType {
             case WireMessage.touchEvent:
-                // Touch event: 1 type + 1 pointerCount + N*(4x+4y) + 4 action.
-                // 1 finger: 14 bytes, 2 fingers: 22 bytes.
+                // Legacy touch event: 1 type + 1 pointerCount + N*(4x+4y) + 4 action.
                 guard inputBuffer.count >= 2 else { return }
-
                 let pointerCount = Int(inputByte(at: 1))
                 guard pointerCount == 1 || pointerCount == 2 else {
                     debugLog("Invalid touch pointer count: \(pointerCount)")
                     consumeInputBytes(1)
                     continue
                 }
-
                 let expectedSize = 2 + pointerCount * 8 + 4
                 guard inputBuffer.count >= expectedSize else { return }
-
                 let message = Data(inputBuffer.prefix(expectedSize))
                 consumeInputBytes(expectedSize)
-
-                // Drop early if host has touch disabled, after consuming exactly
-                // this touch frame so coalesced ping/keyframe messages survive.
                 if touchEnabled {
                     handleTouchMessage(message, pointerCount: pointerCount)
                 }
+
+            case WireMessage.stylusEvent:
+                // Fixed 26-byte frame: type + x/y + action + pressure + tiltX/Y + flags.
+                // Only a client that received our capability acknowledgement may send type 19.
+                guard inputBuffer.count >= 26 else { return }
+                let message = Data(inputBuffer.prefix(26))
+                consumeInputBytes(26)
+                if touchEnabled && clientSupportsStylus {
+                    handleStylusMessage(message)
+                }
+
+            case WireMessage.clientSupportsStylus:
+                // Payload-free opt-in. Older clients never receive the response because
+                // they do not send this request; older hosts safely skip this one byte.
+                consumeInputBytes(1)
+                clientSupportsStylus = true
+                connection.send(content: Data([WireMessage.stylusSupported]),
+                                completion: .contentProcessed { _ in })
+                debugLog("Client supports XiaoMac stylus input")
 
             case WireMessage.ping:
                 // Ping from client: echo back as pong (type=5) with client's timestamp.
@@ -911,19 +949,29 @@ class StreamingServer {
     private func handleTouchMessage(_ data: Data, pointerCount: Int) {
         let x1 = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 2, as: Float.self) }
         let y1 = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 6, as: Float.self) }
-
         var x2: Float = 0
         var y2: Float = 0
         if pointerCount >= 2 {
             x2 = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 10, as: Float.self) }
             y2 = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 14, as: Float.self) }
         }
-
         let actionOffset = 2 + pointerCount * 8
         let action = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: actionOffset, as: Int32.self) }
-
         DispatchQueue.main.async {
             self.onTouchEvent?(x1, y1, Int(action), pointerCount, x2, y2)
+        }
+    }
+
+    private func handleStylusMessage(_ data: Data) {
+        let x = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 1, as: Float.self) }
+        let y = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 5, as: Float.self) }
+        let action = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 9, as: Int32.self) }
+        let pressure = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 13, as: Float.self) }
+        let tiltX = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 17, as: Float.self) }
+        let tiltY = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 21, as: Float.self) }
+        let flags = Int(data[25])
+        DispatchQueue.main.async {
+            self.onStylusEvent?(x, y, Int(action), pressure, tiltX, tiltY, flags)
         }
     }
 

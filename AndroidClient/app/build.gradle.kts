@@ -12,7 +12,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.sidescreen.app"
+        applicationId = "app.xiaomac.tablet"
         minSdk = 26
         targetSdk = 36
         versionCode = computedVersionCode

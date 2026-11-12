@@ -12,7 +12,7 @@ echo "Building version $VERSION..."
 cd "$ROOT_DIR/MacHost"
 
 # Kill running instance
-echo "Stopping running Side Screen..."
+echo "Stopping any running Side Screen host..."
 pkill -f SideScreen 2>/dev/null || true
 sleep 0.5
 
@@ -30,7 +30,7 @@ cp "$BIN_DIR/SideScreen" .build/release-universal/SideScreen
 lipo -archs .build/release-universal/SideScreen
 
 # Create .app bundle
-APP_NAME="SideScreen"
+APP_NAME="XiaoMac"
 APP_DIR="$ROOT_DIR/$APP_NAME.app"
 
 echo "Creating app bundle..."
@@ -64,11 +64,11 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.sidescreen.app</string>
+    <string>app.xiaomac.desktop</string>
     <key>CFBundleName</key>
-    <string>Side Screen</string>
+    <string>XiaoMac</string>
     <key>CFBundleDisplayName</key>
-    <string>Side Screen</string>
+    <string>XiaoMac</string>
     <key>CFBundleVersion</key>
     <string>$VERSION</string><!-- VERSION -->
     <key>CFBundleShortVersionString</key>
@@ -79,20 +79,15 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <string>13.0</string>
     <key>LSUIElement</key>
     <false/>
-    <key>SUFeedURL</key>
-    <string>https://github.com/tranvuongquocdat/SideScreen/releases/latest/download/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>7bJdS/tTNvOEUEobUTrH7IxJsg/FBZcmSHyzY4ZU97I=</string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
+    <!-- Sparkle updates stay disabled until XiaoMac publishes its own signed appcast. -->
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Side Screen needs screen recording access to capture your virtual display and stream it to your Android device.</string>
+    <string>XiaoMac needs screen recording access to capture your virtual display and stream it to your Android device.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Side Screen needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
+    <string>XiaoMac needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_sidescreen._tcp</string>
@@ -127,8 +122,8 @@ echo "Creating DMG..."
 DMG_DIR=$(mktemp -d)
 cp -R "$APP_DIR" "$DMG_DIR/"
 ln -s /Applications "$DMG_DIR/Applications"
-DMG_PATH="$ROOT_DIR/SideScreen-${VERSION}-mac-universal.dmg"
-hdiutil create -volname "Side Screen" -srcfolder "$DMG_DIR" -ov -format UDZO "$DMG_PATH"
+DMG_PATH="$ROOT_DIR/XiaoMac-${VERSION}-mac-universal.dmg"
+hdiutil create -volname "XiaoMac" -srcfolder "$DMG_DIR" -ov -format UDZO "$DMG_PATH"
 if [ -n "${SIDESCREEN_SIGN_IDENTITY:-}" ]; then
     codesign --sign "$SIDESCREEN_SIGN_IDENTITY" --timestamp "$DMG_PATH"
     [ -n "${APPSTORE_API_KEY_P8:-}" ] && "$ROOT_DIR/scripts/notarize.sh" "$DMG_PATH"

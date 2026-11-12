@@ -111,7 +111,7 @@ struct SettingsView: View {
                             .scaleEffect(headerHovered ? 1.05 : 1)
                     }
                     .buttonStyle(.plain)
-                    .help("About Side Screen")
+                    .help("About XiaoMac")
                     .animation(.spring(response: 0.3), value: headerHovered)
                     .onHover { headerHovered = $0 }
                     .popover(isPresented: $showAboutFromLogo, arrowEdge: .bottom) {
@@ -120,7 +120,7 @@ struct SettingsView: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text("Side Screen")
+                            Text("XiaoMac")
                                 .font(.system(size: 20, weight: .bold, design: .rounded))
                             Text("v\(AppInfo.version)")
                                 .font(.system(size: 11, weight: .semibold, design: .rounded))
@@ -146,8 +146,8 @@ struct SettingsView: View {
                             }
                     }
                     .buttonStyle(.plain)
-                    .help("About Side Screen")
-                    .accessibilityLabel("About Side Screen")
+                    .help("About XiaoMac")
+                    .accessibilityLabel("About XiaoMac")
                     .popover(isPresented: $showAbout, arrowEdge: .bottom) {
                         AboutPopover(updater: updater)
                     }
@@ -167,7 +167,7 @@ struct SettingsView: View {
                         Button("Cancel", role: .cancel) { }
                         Button("Reset", role: .destructive) {
                             settings.resetToDefaults()
-                            if let window = NSApp.windows.first(where: { $0.title == "Side Screen" }) {
+                            if let window = NSApp.windows.first(where: { $0.title == "XiaoMac" }) {
                                 window.center()
                             }
                         }
@@ -517,6 +517,40 @@ struct SettingsView: View {
                                         .labelsHidden()
                                 }
 
+                                Divider()
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Enable Stylus Input")
+                                            .font(.system(size: 12, weight: .medium))
+                                        Text("Pressure and tilt support when reported by Android")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Toggle("", isOn: $settings.stylusEnabled)
+                                        .labelsHidden()
+                                }
+                                .disabled(!settings.touchEnabled)
+
+                                Picker("Primary button", selection: $settings.stylusPrimaryAction) {
+                                    Text("Brush / Eraser Toggle (B / E shortcuts)").tag("brushEraser")
+                                    Text("No action").tag("none")
+                                }
+                                .pickerStyle(.menu)
+                                .disabled(!settings.touchEnabled || !settings.stylusEnabled)
+
+                                Picker("Secondary button", selection: $settings.stylusSecondaryAction) {
+                                    Text("System Default (Screenshot)").tag("systemDefault")
+                                    Text("Right Click").tag("rightClick")
+                                    Text("No action").tag("none")
+                                }
+                                .pickerStyle(.menu)
+                                .disabled(!settings.touchEnabled || !settings.stylusEnabled)
+
+                                Text("The primary button alternates between B (brush) and E (eraser). System Default leaves the secondary button to Xiaomi's native screenshot action.")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+
                                 if !settings.touchEnabled {
                                     Text("Touch input is disabled — tablet is display-only")
                                         .font(.system(size: 10))
@@ -569,7 +603,7 @@ struct SettingsView: View {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("Launch at Login")
                                                 .font(.system(size: 12, weight: .medium))
-                                            Text("Run SideScreen in the background automatically after you log in.")
+                                            Text("Run XiaoMac in the background automatically after you log in.")
                                                 .font(.system(size: 10))
                                                 .foregroundColor(.secondary)
                                         }
@@ -1031,7 +1065,7 @@ struct SettingsView: View {
                                 }
                         }
                         .buttonStyle(.plain)
-                        .help("Quit Side Screen (⌘Q)")
+                        .help("Quit XiaoMac (⌘Q)")
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 14)
@@ -1078,7 +1112,7 @@ struct AboutPopover: View {
                     .resizable()
                     .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Side Screen")
+                    Text("XiaoMac")
                         .font(.system(size: 15, weight: .semibold))
                     Text("Version \(AppInfo.version)")
                         .font(.system(size: 12))
@@ -1090,7 +1124,7 @@ struct AboutPopover: View {
                 }
                 .disabled(!updater.canCheckForUpdates)
                 .help(updater.canCheckForUpdates
-                      ? "Look for a newer version now. Side Screen also checks once a day."
+                      ? "Look for a newer version now. XiaoMac also checks once a day."
                       : "Update checks are only available in the released build.")
             }
 
@@ -1113,13 +1147,13 @@ struct AboutPopover: View {
 
             Divider()
 
-            Text("If you find Side Screen useful, [support the developer](https://sidescreen.dev/donate.html) — it keeps me motivated to build more useful things.")
+            Text("XiaoMac is an independent fork of [Side Screen](https://github.com/tranvuongquocdat/SideScreen), originally created by Tran Vuong Quoc Dat. The upstream project remains credited under its MIT licence.")
                 .font(.system(size: 12))
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 4) {
                 Spacer()
-                Text("Developed by Tran Vuong Quoc Dat with")
+                Text("Built on Side Screen by Tran Vuong Quoc Dat, with")
                 Image(systemName: "heart.fill")
                     .foregroundColor(.red)
                 Spacer()
@@ -1289,7 +1323,7 @@ struct RotationButton: View {
 
 class DisplaySettings: ObservableObject {
     private let defaults = UserDefaults.standard
-    private let keyPrefix = "SideScreen_"
+    private let keyPrefix = "XiaoMac_"
 
     @Published var resolution: String {
         didSet { save("resolution", resolution) }
@@ -1332,6 +1366,15 @@ class DisplaySettings: ObservableObject {
     }
     @Published var touchEnabled: Bool {
         didSet { save("touchEnabled", touchEnabled) }
+    }
+    @Published var stylusEnabled: Bool {
+        didSet { save("stylusEnabled", stylusEnabled) }
+    }
+    @Published var stylusPrimaryAction: String {
+        didSet { save("stylusPrimaryAction", stylusPrimaryAction) }
+    }
+    @Published var stylusSecondaryAction: String {
+        didSet { save("stylusSecondaryAction", stylusSecondaryAction) }
     }
     @Published var connectionMode: ConnectionMode {
         didSet { save("connectionMode", connectionMode.rawValue) }
@@ -1389,6 +1432,9 @@ class DisplaySettings: ObservableObject {
         self.customWidth = defaults.object(forKey: keyPrefix + "customWidth") as? Int ?? 1920
         self.customHeight = defaults.object(forKey: keyPrefix + "customHeight") as? Int ?? 1200
         self.touchEnabled = defaults.object(forKey: keyPrefix + "touchEnabled") as? Bool ?? true
+        self.stylusEnabled = defaults.object(forKey: keyPrefix + "stylusEnabled") as? Bool ?? true
+        self.stylusPrimaryAction = defaults.string(forKey: keyPrefix + "stylusPrimaryAction") ?? "brushEraser"
+        self.stylusSecondaryAction = defaults.string(forKey: keyPrefix + "stylusSecondaryAction") ?? "systemDefault"
         let modeRaw = defaults.string(forKey: keyPrefix + "connectionMode") ?? ConnectionMode.usb.rawValue
         self.connectionMode = ConnectionMode(rawValue: modeRaw) ?? .usb
         self.autoStartStreamingOnLaunch = defaults.object(forKey: keyPrefix + "autoStartStreamingOnLaunch") as? Bool ?? false
@@ -1403,7 +1449,7 @@ class DisplaySettings: ObservableObject {
     }
 
     /// The tablet-specific slice of the settings, plus the display position
-    /// VirtualDisplayManager last saved (same `SideScreen_` keys).
+    /// VirtualDisplayManager last saved (same `XiaoMac_` keys).
     var profileSettings: ProfileSettings {
         let hasPosition = defaults.bool(forKey: keyPrefix + "hasPosition")
         return ProfileSettings(
@@ -1499,7 +1545,7 @@ class DisplaySettings: ObservableObject {
     func resetToDefaults() {
         let keys = ["resolution", "refreshRate", "hiDPI", "bitrate", "quality",
                     "gamingBoost", "port", "rotation", "flipHorizontal", "flipVertical", "showAllResolutions",
-                    "customWidth", "customHeight", "touchEnabled", "autoStartStreamingOnLaunch", "startupMode"]
+                    "customWidth", "customHeight", "touchEnabled", "stylusEnabled", "stylusPrimaryAction", "stylusSecondaryAction", "autoStartStreamingOnLaunch", "startupMode"]
         for key in keys {
             defaults.removeObject(forKey: keyPrefix + key)
         }
@@ -1518,6 +1564,9 @@ class DisplaySettings: ObservableObject {
         customWidth = 1920
         customHeight = 1200
         touchEnabled = true
+        stylusEnabled = true
+        stylusPrimaryAction = "brushEraser"
+        stylusSecondaryAction = "systemDefault"
         autoStartStreamingOnLaunch = false
         startupMode = .usb
 
@@ -1556,7 +1605,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             defer: false
         )
 
-        window.title = "Side Screen"
+        window.title = "XiaoMac"
         window.titlebarAppearsTransparent = true
         window.backgroundColor = .windowBackgroundColor
         window.isMovableByWindowBackground = true
@@ -1664,7 +1713,7 @@ struct WirelessSection: View {
                     } else {
                         Text("Generating QR…").foregroundColor(.secondary)
                     }
-                    Text("Scan this QR from Side Screen Android (Wireless tab)")
+                    Text("Scan this QR from XiaoMac Android (Wireless tab)")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)

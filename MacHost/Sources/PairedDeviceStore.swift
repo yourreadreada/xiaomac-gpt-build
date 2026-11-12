@@ -6,7 +6,7 @@ struct PairedDevice: Codable, Equatable {
 }
 
 final class PairedDeviceStore {
-    static let userDefaultsKey = "wireless.pairedDevices"
+    static let userDefaultsKey = "xiaomac.wireless.pairedDevices"
 
     private let defaults: UserDefaults
 
