@@ -2,6 +2,7 @@ import Cocoa
 import SwiftUI
 import Combine
 import ApplicationServices
+import IOKit
 import os.log
 @preconcurrency import ScreenCaptureKit
 
@@ -30,6 +31,7 @@ enum GestureState {
     case scrolling        // 1-finger scroll
     case longPressReady   // Long press detected, waiting for drag or release
     case dragging         // Long press + drag (left mouse drag)
+    case penDrawing       // Direct stylus stroke
     case twoFingerScroll  // 2-finger scroll
     case pinching         // Pinch zoom
 }
@@ -955,37 +957,81 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Touch Entry Point
 
-    func handleTouch(x: Float, y: Float, action: Int, pointerCount: Int = 1, x2: Float = 0, y2: Float = 0) {
-        guard settings.touchEnabled else { return }
+    private var lastStylusPressure: Float = 0
+    private var lastStylusTilt: Float = 0
+    private var primaryStylusDown = false
 
+    func handleTouch(x: Float, y: Float, action: Int, pointerCount: Int = 1,
+                     x2: Float = 0, y2: Float = 0, pressure: Float = 0, tilt: Float = 0, flags: Int = 0) {
+        guard settings.touchEnabled else { return }
         if !AXIsProcessTrusted() {
             if !accessibilityWarningShown {
                 accessibilityWarningShown = true
-                print("⚠️  Accessibility not granted - touch ignored")
-                Task { @MainActor in
-                    settings.hasAccessibilityPermission = false
-                }
+                debugLog("Accessibility not granted - touch ignored")
+                Task { @MainActor in settings.hasAccessibilityPermission = false }
             }
             return
         }
-
         guard let displayID = virtualDisplayManager?.displayID else { return }
         let bounds = CGDisplayBounds(displayID)
+        let p1 = CGPoint(x: bounds.origin.x + CGFloat(x) * bounds.width,
+                         y: bounds.origin.y + CGFloat(y) * bounds.height)
+        let p2 = CGPoint(x: bounds.origin.x + CGFloat(x2) * bounds.width,
+                         y: bounds.origin.y + CGFloat(y2) * bounds.height)
 
-        let p1 = CGPoint(
-            x: bounds.origin.x + CGFloat(x) * bounds.width,
-            y: bounds.origin.y + CGFloat(y) * bounds.height
-        )
-        let p2 = CGPoint(
-            x: bounds.origin.x + CGFloat(x2) * bounds.width,
-            y: bounds.origin.y + CGFloat(y2) * bounds.height
-        )
+        if (flags & 1) != 0 {
+            guard settings.stylusEnabled else { return }
+            lastStylusPressure = min(max(pressure, 0), 1)
+            lastStylusTilt = min(max(tilt, 0), 1)
+            if (flags & 2) != 0 {
+                if action == 3 { moveCursor(to: p1) }
+                return
+            }
+            switch action {
+            case 0:
+                releaseStylusIfNeeded(at: p1)
+                touchStartPosition = p1
+                touchLastPosition = p1
+                gestureState = .penDrawing
+                primaryStylusDown = true
+                moveCursor(to: p1)
+                injectTabletPoint(at: p1, type: .leftMouseDown, pressure: pressure, tilt: tilt)
+            case 1:
+                guard primaryStylusDown else { return }
+                injectTabletPoint(at: p1, type: .leftMouseDragged, pressure: pressure, tilt: tilt)
+                touchLastPosition = p1
+            case 2, 4:
+                guard primaryStylusDown else { return }
+                injectTabletPoint(at: p1, type: .leftMouseUp, pressure: pressure, tilt: tilt)
+                primaryStylusDown = false
+                gestureState = .idle
+            default: break
+            }
+            return
+        }
 
         if pointerCount >= 2 {
             handleTwoFingerTouch(p1: p1, p2: p2, action: action)
         } else {
             handleOneFingerTouch(at: p1, action: action)
         }
+    }
+
+    private func injectTabletPoint(at point: CGPoint, type: CGEventType, pressure: Float, tilt: Float) {
+        guard let event = CGEvent(mouseEventSource: eventSource, mouseType: type,
+                                  mouseCursorPosition: point, mouseButton: .left) else { return }
+        event.setIntegerValueField(.mouseEventSubtype, value: 1)
+        event.setDoubleValueField(.tabletEventPointPressure, value: Double(pressure))
+        event.setDoubleValueField(.tabletEventTiltX, value: Double(tilt))
+        event.setDoubleValueField(.tabletEventTiltY, value: 0)
+        event.post(tap: .cghidEventTap)
+    }
+
+    private func releaseStylusIfNeeded(at point: CGPoint) {
+        guard primaryStylusDown else { return }
+        injectTabletPoint(at: point, type: .leftMouseUp, pressure: 0, tilt: lastStylusTilt)
+        primaryStylusDown = false
+        gestureState = .idle
     }
 
     // MARK: - 1-Finger Gesture State Machine
