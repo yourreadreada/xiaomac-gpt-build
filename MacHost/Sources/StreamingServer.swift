@@ -757,7 +757,7 @@ class StreamingServer {
                 // Only a client that received our capability acknowledgement may send type 19.
                 guard inputBuffer.count >= 22 else { return }
                 let message = Data(inputBuffer.prefix(22))
-                consumeInputBytes(27)
+                consumeInputBytes(26)
                 if touchEnabled && clientSupportsStylus {
                     handleStylusMessage(message)
                 }
