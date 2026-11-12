@@ -45,8 +45,8 @@ import java.net.Socket
 
 private fun mainDiag(msg: String) = DiagLog.log("MA", msg)
 
-private const val MAC_APP_URL = "https://sidescreen.dev"
-private const val REPORT_PROBLEM_URL = "https://github.com/tranvuongquocdat/SideScreen/issues/new/choose"
+private const val MAC_APP_URL = "https://github.com/yourreadreada/xiaomac-gpt-build"
+private const val REPORT_PROBLEM_URL = "https://github.com/yourreadreada/xiaomac-gpt-build/issues"
 
 class MainActivity : AppCompatActivity() {
     private lateinit var wirelessController: WirelessTabController
