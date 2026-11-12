@@ -176,7 +176,7 @@ class StreamingServer {
     // Legacy touch callback remains wire-compatible with existing clients.
     var onTouchEvent: ((Float, Float, Int, Int, Float, Float) -> Void)?
     // Dedicated stylus callback: normalized x/y, action, pressure, tilt, button flags.
-    var onStylusEvent: ((Float, Float, Int, Float, Float, Int) -> Void)?
+    var onStylusEvent: ((Float, Float, Int, Float, Float, Float, Int) -> Void)?
     var onStats: ((Double, Double) -> Void)?
     var onKeyframeRequested: ((Bool) -> Void)?
     // Whether host wants to receive touch events from client. Ping/pong is
@@ -757,7 +757,7 @@ class StreamingServer {
                 // Only a client that received our capability acknowledgement may send type 19.
                 guard inputBuffer.count >= 22 else { return }
                 let message = Data(inputBuffer.prefix(22))
-                consumeInputBytes(22)
+                consumeInputBytes(27)
                 if touchEnabled && clientSupportsStylus {
                     handleStylusMessage(message)
                 }
@@ -966,10 +966,11 @@ class StreamingServer {
         let y = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 5, as: Float.self) }
         let action = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 9, as: Int32.self) }
         let pressure = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 13, as: Float.self) }
-        let tilt = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 17, as: Float.self) }
-        let flags = Int(data[21])
+        let tiltX = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 17, as: Float.self) }
+        let tiltY = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 21, as: Float.self) }
+        let flags = Int(data[25])
         DispatchQueue.main.async {
-            self.onStylusEvent?(x, y, Int(action), pressure, tilt, flags)
+            self.onStylusEvent?(x, y, Int(action), pressure, tiltX, tiltY, flags)
         }
     }
 
