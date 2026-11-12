@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Side Screen</string>
+    <string>XiaoMac</string>
     <key>CFBundleIdentifier</key>
-    <string>com.sidescreen.app</string>
+    <string>app.xiaomac.desktop</string>
     <key>CFBundleVersion</key>
     <string>0.7.0</string>
     <key>CFBundleShortVersionString</key>
@@ -14,8 +14,6 @@
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
-    <key>SUFeedURL</key>
-    <string>https://github.com/tranvuongquocdat/SideScreen/releases/latest/download/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>7bJdS/tTNvOEUEobUTrH7IxJsg/FBZcmSHyzY4ZU97I=</string>
     <key>SUEnableAutomaticChecks</key>
