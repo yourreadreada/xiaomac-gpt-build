@@ -13,10 +13,10 @@ permissions:
   contents: read
 
 jobs:
-  build-and-package:
-    name: Build macOS app + Android APK
-    runs-on: macos-15-intel
-    timeout-minutes: 45
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Check out XiaoMac
         uses: actions/checkout@v4
@@ -28,14 +28,35 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Build Android debug APK
+      - name: Build and test Android client
         working-directory: AndroidClient
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon testDebugUnitTest assembleDebug
+
+      - name: Lint Kotlin
+        working-directory: AndroidClient
+        run: |
+          curl -sSLO https://github.com/pinterest/ktlint/releases/download/1.1.1/ktlint
+          chmod a+x ktlint
+          ./ktlint "app/src/main/java/**/*.kt"
+
+      - name: Upload XiaoMac Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: XiaoMac-Android-debug
+          path: AndroidClient/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  build-macos-and-package:
+    name: Build universal Mac app + package bundle
+    needs: build-android
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - name: Check out XiaoMac
+        uses: actions/checkout@v4
 
       - name: Lint Swift
         run: |
@@ -48,11 +69,17 @@ jobs:
           chmod +x ./scripts/build_mac.sh
           ./scripts/build_mac.sh
 
+      - name: Download Android APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: XiaoMac-Android-debug
+          path: artifacts/android
+
       - name: Assemble distribution folder
         run: |
           mkdir -p dist/XiaoMac
           cp -R XiaoMac.app dist/XiaoMac/XiaoMac.app
-          cp AndroidClient/app/build/outputs/apk/debug/app-debug.apk dist/XiaoMac/XiaoMac-Android-debug.apk
+          cp artifacts/android/app-debug.apk dist/XiaoMac/XiaoMac-Android-debug.apk
           cat > dist/XiaoMac/BUILD-INFO.txt <<'EOF'
           XiaoMac development build
 
