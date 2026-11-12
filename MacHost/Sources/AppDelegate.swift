@@ -281,6 +281,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        Publishers.CombineLatest(settings.$stylusPrimaryAction, settings.$stylusSecondaryAction)
+            .dropFirst()
+            .sink { [weak self] primary, secondary in
+                self?.streamingServer?.updateStylusButtonActions(
+                    primary: primary == "brushEraser" ? 1 : 0,
+                    secondary: secondary == "rightClick" ? 3 : (secondary == "none" ? 2 : 0)
+                )
+            }
+            .store(in: &cancellables)
+
         // Observer cho connection mode changes — restart server with new auth/ADB policy.
         settings.$connectionMode
             .dropFirst()
@@ -608,6 +618,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // Setup server
             streamingServer = StreamingServer(port: settings.port)
             streamingServer?.touchEnabled = settings.touchEnabled
+            streamingServer?.updateStylusButtonActions(
+                primary: settings.stylusPrimaryAction == "brushEraser" ? 1 : 0,
+                secondary: settings.stylusSecondaryAction == "rightClick" ? 3 :
+                    (settings.stylusSecondaryAction == "none" ? 2 : 0)
+            )
             if settings.connectionMode == .wireless {
                 streamingServer?.expectedAuthToken = WirelessAuth.loadOrCreate()
                 configurePairingCode(on: streamingServer)
@@ -676,9 +691,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.handleTouch(x: x, y: y, action: action, pointerCount: pointerCount, x2: x2, y2: y2)
             }
 
-            streamingServer?.onStylusEvent = { [weak self] x, y, action, pressure, tilt, flags in
+            streamingServer?.onStylusEvent = { [weak self] x, y, action, pressure, tiltX, tiltY, flags in
                 self?.handleTouch(x: x, y: y, action: action, pointerCount: 1,
-                                  pressure: pressure, tilt: tilt, flags: flags | 1)
+                                  pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags | 1)
             }
 
             streamingServer?.onStats = { [weak self] fps, mbps in
@@ -975,13 +990,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Touch Entry Point
 
     private var lastStylusPressure: Float = 0
-    private var lastStylusTilt: Float = 0
+    private var lastStylusTiltX: Float = 0
+    private var lastStylusTiltY: Float = 0
     private var primaryStylusDown = false
     private var stylusPrimaryButtonPressed = false
     private var stylusSecondaryButtonPressed = false
+    private var stylusEraserToggleActive = false
 
     func handleTouch(x: Float, y: Float, action: Int, pointerCount: Int = 1,
-                     x2: Float = 0, y2: Float = 0, pressure: Float = 0, tilt: Float = 0, flags: Int = 0) {
+                     x2: Float = 0, y2: Float = 0, pressure: Float = 0,
+                     tiltX: Float = 0, tiltY: Float = 0, flags: Int = 0) {
         guard settings.touchEnabled else { return }
         if !AXIsProcessTrusted() {
             if !accessibilityWarningShown {
@@ -1001,7 +1019,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if (flags & 1) != 0 {
             guard settings.stylusEnabled else { return }
             lastStylusPressure = min(max(pressure, 0), 1)
-            lastStylusTilt = min(max(tilt, 0), 1)
+            lastStylusTiltX = min(max(tiltX, -1), 1)
+            lastStylusTiltY = min(max(tiltY, -1), 1)
             handleStylusButtons(flags: flags, at: p1)
             if (flags & 2) != 0 {
                 if action == 3 { moveCursor(to: p1) }
@@ -1015,14 +1034,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 gestureState = .penDrawing
                 primaryStylusDown = true
                 moveCursor(to: p1)
-                injectTabletPoint(at: p1, type: .leftMouseDown, pressure: pressure, tilt: tilt)
+                injectTabletPoint(at: p1, type: .leftMouseDown, pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags)
             case 1:
                 guard primaryStylusDown else { return }
-                injectTabletPoint(at: p1, type: .leftMouseDragged, pressure: pressure, tilt: tilt)
+                injectTabletPoint(at: p1, type: .leftMouseDragged, pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags)
                 touchLastPosition = p1
             case 2, 4:
                 guard primaryStylusDown else { return }
-                injectTabletPoint(at: p1, type: .leftMouseUp, pressure: pressure, tilt: tilt)
+                injectTabletPoint(at: p1, type: .leftMouseUp, pressure: pressure, tiltX: tiltX, tiltY: tiltY, flags: flags)
                 primaryStylusDown = false
                 gestureState = .idle
             default: break
@@ -1037,21 +1056,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func injectTabletPoint(at point: CGPoint, type: CGEventType, pressure: Float, tilt: Float) {
+    private func injectTabletPoint(at point: CGPoint, type: CGEventType, pressure: Float,
+                                   tiltX: Float, tiltY: Float, flags: Int) {
         guard let event = CGEvent(mouseEventSource: eventSource, mouseType: type,
                                   mouseCursorPosition: point, mouseButton: .left) else { return }
-        // NX_SUBTYPE_TABLET_POINT is 1; this marks the synthetic event as a tablet point
-        // so drawing applications can read pressure/tilt rather than seeing only a mouse.
-        event.setIntegerValueField(.mouseEventSubtype, value: 1)
-        event.setDoubleValueField(.tabletEventPointPressure, value: Double(pressure))
-        event.setDoubleValueField(.tabletEventTiltX, value: Double(tilt))
-        event.setDoubleValueField(.tabletEventTiltY, value: 0)
+        event.setIntegerValueField(.mouseEventSubtype, value: Int64(CGEventMouseSubtype.tabletPoint.rawValue))
+        event.setDoubleValueField(.tabletEventPointPressure, value: Double(min(max(pressure, 0), 1)))
+        event.setDoubleValueField(.tabletEventTiltX, value: Double(min(max(tiltX, -1), 1)))
+        event.setDoubleValueField(.tabletEventTiltY, value: Double(min(max(tiltY, -1), 1)))
+        event.setIntegerValueField(.tabletProximityEventPointerType, value: (flags & 16) != 0 ? 3 : 1)
         event.post(tap: .cghidEventTap)
     }
 
     private func releaseStylusIfNeeded(at point: CGPoint) {
         if primaryStylusDown {
-            injectTabletPoint(at: point, type: .leftMouseUp, pressure: 0, tilt: lastStylusTilt)
+            injectTabletPoint(at: point, type: .leftMouseUp, pressure: 0,
+                              tiltX: lastStylusTiltX, tiltY: lastStylusTiltY, flags: 1)
         }
         primaryStylusDown = false
         stylusPrimaryButtonPressed = false
@@ -1066,9 +1086,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if primaryNow && !stylusPrimaryButtonPressed {
             switch settings.stylusPrimaryAction {
             case "brushEraser":
-                // E is the common brush/eraser toggle shortcut; the receiving app can
-                // override this mapping in XiaoMac settings in a later iteration.
-                injectKeyPress(keyCode: 14)
+                stylusEraserToggleActive.toggle()
+                // B selects brush; E selects eraser in common drawing applications.
+                injectKeyPress(keyCode: stylusEraserToggleActive ? 14 : 11)
             default:
                 break
             }
