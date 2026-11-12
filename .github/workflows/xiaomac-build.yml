@@ -79,11 +79,13 @@ jobs:
         run: |
           mkdir -p dist/XiaoMac
           cp -R XiaoMac.app dist/XiaoMac/XiaoMac.app
+          cp XiaoMac-*-mac-universal.dmg dist/XiaoMac/XiaoMac-mac-universal.dmg
           cp artifacts/android/app-debug.apk dist/XiaoMac/XiaoMac-Android-debug.apk
           cat > dist/XiaoMac/BUILD-INFO.txt <<'EOF'
           XiaoMac development build
 
           macOS: XiaoMac.app (Universal Apple Silicon + Intel)
+          macOS installer: XiaoMac-mac-universal.dmg
           Android: XiaoMac-Android-debug.apk (debug-signed, sideload build)
 
           This is an experimental fork of Side Screen. The stylus input path still
