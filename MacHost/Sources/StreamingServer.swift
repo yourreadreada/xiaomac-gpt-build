@@ -42,6 +42,7 @@ private enum WireMessage {
     static let clientIdentity: UInt8 = 18
     static let clientSupportsStylus: UInt8 = 20
     static let stylusSupported: UInt8 = 21
+    static let stylusButtonConfig: UInt8 = 22
     /// Client→server, fixed 21-byte payload: normalized x/y, action, pressure, tilt, button flags.
     static let stylusEvent: UInt8 = 19
 }
@@ -259,6 +260,8 @@ class StreamingServer {
     /// Set when the client opts in via type 12. Gates desktopGeometry sends.
     private var clientSupportsDesktopGeometry = false
     private var clientSupportsStylus = false
+    private var stylusPrimaryButtonAction: UInt8 = 1
+    private var stylusSecondaryButtonAction: UInt8 = 0
     /// Type 18 identity of the connected client, if it sent one.
     private var clientIdentity: DeviceIdentity?
     /// Name from the wireless auth handshake (nil over USB).
@@ -463,8 +466,23 @@ class StreamingServer {
         debugLog("Client connected - sending display config first")
         sendDisplaySize()
         connectionReady = true
+        sendStylusButtonConfigIfSupported()
         debugLog("Connection ready for frames (metadata=\(clientSupportsFrameMetadata ? "on" : "off"), codec=\(codec))")
         onClientConnected?()
+    }
+
+    func updateStylusButtonActions(primary: UInt8, secondary: UInt8) {
+        stylusPrimaryButtonAction = primary
+        stylusSecondaryButtonAction = secondary
+        sendStylusButtonConfigIfSupported()
+    }
+
+    private func sendStylusButtonConfigIfSupported() {
+        guard clientSupportsStylus, connectionReady, let connection else { return }
+        connection.send(
+            content: Data([WireMessage.stylusButtonConfig, stylusPrimaryButtonAction, stylusSecondaryButtonAction]),
+            completion: .contentProcessed { _ in }
+        )
     }
 
     private func runAuthHandshake(connection conn: NWConnection, expectedToken: Data) {
