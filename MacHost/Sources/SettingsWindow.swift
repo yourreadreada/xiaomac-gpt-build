@@ -533,7 +533,7 @@ struct SettingsView: View {
                                 .disabled(!settings.touchEnabled)
 
                                 Picker("Primary button", selection: $settings.stylusPrimaryAction) {
-                                    Text("Brush / Eraser Toggle").tag("brushEraser")
+                                    Text("Brush / Eraser Toggle (E shortcut)").tag("brushEraser")
                                     Text("No action").tag("none")
                                 }
                                 .pickerStyle(.menu)
@@ -541,10 +541,15 @@ struct SettingsView: View {
 
                                 Picker("Secondary button", selection: $settings.stylusSecondaryAction) {
                                     Text("System Default (Screenshot)").tag("systemDefault")
+                                    Text("Right Click").tag("rightClick")
                                     Text("No action").tag("none")
                                 }
                                 .pickerStyle(.menu)
                                 .disabled(!settings.touchEnabled || !settings.stylusEnabled)
+
+                                Text("The primary button sends the E shortcut for brush/eraser toggling. System Default leaves the secondary button to Xiaomi's native screenshot action.")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
 
                                 if !settings.touchEnabled {
                                     Text("Touch input is disabled — tablet is display-only")
