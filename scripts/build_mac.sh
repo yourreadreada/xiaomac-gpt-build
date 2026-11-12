@@ -68,7 +68,7 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <key>CFBundleName</key>
     <string>XiaoMac</string>
     <key>CFBundleDisplayName</key>
-    <string>Side Screen</string>
+    <string>XiaoMac</string>
     <key>CFBundleVersion</key>
     <string>$VERSION</string><!-- VERSION -->
     <key>CFBundleShortVersionString</key>
@@ -85,9 +85,9 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Side Screen needs screen recording access to capture your virtual display and stream it to your Android device.</string>
+    <string>XiaoMac needs screen recording access to capture your virtual display and stream it to your Android device.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Side Screen needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
+    <string>XiaoMac needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_sidescreen._tcp</string>
