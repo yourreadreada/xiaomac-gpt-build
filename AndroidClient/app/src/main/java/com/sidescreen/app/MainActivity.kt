@@ -388,10 +388,12 @@ class MainActivity : AppCompatActivity() {
             if (demoActive) showDemoTouchHint(event) else handleTouch(view, event)
             true
         }
+        binding.surfaceView.setOnHoverListener { view, event -> handleStylusHover(view, event) }
         binding.textureView.setOnTouchListener { view, event ->
             if (demoActive) showDemoTouchHint(event) else handleTouch(view, event)
             true
         }
+        binding.textureView.setOnHoverListener { view, event -> handleStylusHover(view, event) }
     }
 
     private fun setupUI() {
@@ -1685,16 +1687,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleTouch(
-        view: View,
-        event: MotionEvent,
-    ) {
+    private fun handleTouch(view: View, event: MotionEvent) {
+        val stylusIndex = (0 until event.pointerCount).firstOrNull {
+            val t = event.getToolType(it)
+            t == MotionEvent.TOOL_TYPE_STYLUS || t == MotionEvent.TOOL_TYPE_ERASER
+        }
+        if (stylusIndex != null) {
+            val i = stylusIndex
+            val x = (event.getX(i) / view.width.toFloat()).coerceIn(0f, 1f)
+            val y = (event.getY(i) / view.height.toFloat()).coerceIn(0f, 1f)
+            val pressure = event.getPressure(i).coerceIn(0f, 1f)
+            val tilt = event.getAxisValue(MotionEvent.AXIS_TILT, i).coerceIn(0f, 1f)
+            val buttonState = event.buttonState
+            val flags = 1 or ((buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0).let { if (it) 4 else 0 } or
+                ((buttonState and MotionEvent.BUTTON_STYLUS_SECONDARY) != 0).let { if (it) 8 else 0 }
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN ->
+                    streamClient?.sendTouch(x, y, 0, pressure = pressure, tilt = tilt, flags = flags)
+                MotionEvent.ACTION_MOVE ->
+                    streamClient?.sendTouch(x, y, 1, pressure = pressure, tilt = tilt, flags = flags)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL ->
+                    streamClient?.sendTouch(x, y, 2, pressure = 0f, tilt = tilt, flags = flags)
+            }
+            return
+        }
+
         val rawX = event.x / view.width.toFloat()
         val rawY = event.y / view.height.toFloat()
         val x = if (displayFlipHorizontal) 1f - rawX else rawX
         val y = if (displayFlipVertical) 1f - rawY else rawY
         val pointerCount = event.pointerCount.coerceAtMost(2)
-
         var x2 = 0f
         var y2 = 0f
         if (pointerCount >= 2) {
@@ -1703,42 +1725,45 @@ class MainActivity : AppCompatActivity() {
             x2 = if (displayFlipHorizontal) 1f - rawX2 else rawX2
             y2 = if (displayFlipVertical) 1f - rawY2 else rawY2
         }
-
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 inputPredictor.reset()
                 inputPredictor.addSample(x, y)
                 streamClient?.sendTouch(x, y, 0, pointerCount, x2, y2)
             }
-
-            MotionEvent.ACTION_POINTER_DOWN -> {
-                streamClient?.sendTouch(x, y, 0, pointerCount, x2, y2)
-            }
-
+            MotionEvent.ACTION_POINTER_DOWN -> streamClient?.sendTouch(x, y, 0, pointerCount, x2, y2)
             MotionEvent.ACTION_MOVE -> {
                 if (pointerCount == 1) {
                     inputPredictor.addSample(x, y)
                     val (px, py) = inputPredictor.predictPosition(12f)
                     streamClient?.sendTouch(px, py, 1, 1)
-                } else {
-                    streamClient?.sendTouch(x, y, 1, pointerCount, x2, y2)
-                }
+                } else streamClient?.sendTouch(x, y, 1, pointerCount, x2, y2)
             }
-
             MotionEvent.ACTION_UP -> {
                 inputPredictor.reset()
                 streamClient?.sendTouch(x, y, 2, 1)
             }
-
-            MotionEvent.ACTION_POINTER_UP -> {
-                streamClient?.sendTouch(x, y, 2, pointerCount, x2, y2)
-            }
-
+            MotionEvent.ACTION_POINTER_UP -> streamClient?.sendTouch(x, y, 2, pointerCount, x2, y2)
             MotionEvent.ACTION_CANCEL -> {
                 inputPredictor.reset()
                 streamClient?.sendTouch(x, y, 2, 1)
             }
         }
+    }
+
+    private fun handleStylusHover(view: View, event: MotionEvent): Boolean {
+        if (event.getToolType(0) != MotionEvent.TOOL_TYPE_STYLUS) return false
+        val x = (event.x / view.width.toFloat()).coerceIn(0f, 1f)
+        val y = (event.y / view.height.toFloat()).coerceIn(0f, 1f)
+        val tilt = event.getAxisValue(MotionEvent.AXIS_TILT, 0).coerceIn(0f, 1f)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE ->
+                streamClient?.sendTouch(x, y, 3, pressure = 0f, tilt = tilt, flags = 1 or 2)
+            MotionEvent.ACTION_HOVER_EXIT ->
+                streamClient?.sendTouch(x, y, 4, pressure = 0f, tilt = tilt, flags = 1 or 2)
+            else -> return false
+        }
+        return true
     }
 
     private fun applyRotation(
