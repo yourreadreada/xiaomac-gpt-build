@@ -754,9 +754,10 @@ class StreamingServer {
                 }
 
             case WireMessage.stylusEvent:
+                // Fixed 26-byte frame: type + x/y + action + pressure + tiltX/Y + flags.
                 // Only a client that received our capability acknowledgement may send type 19.
-                guard inputBuffer.count >= 22 else { return }
-                let message = Data(inputBuffer.prefix(22))
+                guard inputBuffer.count >= 26 else { return }
+                let message = Data(inputBuffer.prefix(26))
                 consumeInputBytes(26)
                 if touchEnabled && clientSupportsStylus {
                     handleStylusMessage(message)
