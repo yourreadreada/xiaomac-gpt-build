@@ -267,7 +267,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         settings.$touchEnabled
             .dropFirst()
             .sink { [weak self] enabled in
-                self?.streamingServer?.touchEnabled = enabled
+                guard let self else { return }
+                self.streamingServer?.touchEnabled = enabled
+                if !enabled { self.releaseStylusIfNeeded(at: self.touchLastPosition) }
+            }
+            .store(in: &cancellables)
+
+        settings.$stylusEnabled
+            .dropFirst()
+            .sink { [weak self] enabled in
+                guard let self else { return }
+                if !enabled { self.releaseStylusIfNeeded(at: self.touchLastPosition) }
             }
             .store(in: &cancellables)
 
@@ -1040,10 +1050,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func releaseStylusIfNeeded(at point: CGPoint) {
-        guard primaryStylusDown else { return }
-        injectTabletPoint(at: point, type: .leftMouseUp, pressure: 0, tilt: lastStylusTilt)
+        if primaryStylusDown {
+            injectTabletPoint(at: point, type: .leftMouseUp, pressure: 0, tilt: lastStylusTilt)
+        }
         primaryStylusDown = false
-        gestureState = .idle
+        stylusPrimaryButtonPressed = false
+        stylusSecondaryButtonPressed = false
+        if gestureState == .penDrawing { gestureState = .idle }
     }
 
     private func handleStylusButtons(flags: Int, at point: CGPoint) {
