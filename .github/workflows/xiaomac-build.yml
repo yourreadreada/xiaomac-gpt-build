@@ -64,7 +64,7 @@ jobs:
       - name: Upload XiaoMac distribution ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: XiaoMac-DevBuild
+          name: XiaoMac-Bundle
           path: dist/XiaoMac/
           if-no-files-found: error
           retention-days: 14
