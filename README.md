@@ -4,9 +4,9 @@
 
 <img src="resources/logo/sidescreen-icon.png" alt="Side Screen" width="128"/>
 
-<h1>Side Screen</h1>
+<h1>XiaoMac</h1>
 
-<p><em>Turn your Android tablet into a second display for macOS — USB-C or wireless over WiFi</em></p>
+<p><em>A Side Screen fork focused on Xiaomi tablet compatibility and pen input for macOS.</em></p>
 
 <p>
   <img src="https://img.shields.io/github/v/release/tranvuongquocdat/SideScreen?style=for-the-badge&label=version&color=blue" alt="Version">
@@ -38,6 +38,8 @@
 ---
 
 ## About
+
+**XiaoMac** is an independent fork of [Side Screen](https://github.com/tranvuongquocdat/SideScreen). It keeps the upstream USB / Wi-Fi display engine and adds Xiaomi-focused input improvements. The upstream project and its original author remain credited under the MIT licence.
 
 Side Screen brings true second-display functionality to your Android tablet — over USB-C cable for the lowest latency, or wirelessly over WiFi after a one-time QR pair. Something macOS doesn't natively support either way.
 
