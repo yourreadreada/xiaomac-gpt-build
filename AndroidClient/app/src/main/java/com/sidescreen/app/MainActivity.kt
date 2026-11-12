@@ -1689,12 +1689,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleTouch(view: View, event: MotionEvent) {
+    private fun handleTouch(
+        view: View,
+        event: MotionEvent,
+    ) {
         if (view.width <= 0 || view.height <= 0 || event.pointerCount == 0) return
-        val stylusIndex = (0 until event.pointerCount).firstOrNull {
-            val tool = event.getToolType(it)
-            tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER
-        }
+        val stylusIndex =
+            (0 until event.pointerCount).firstOrNull {
+                val tool = event.getToolType(it)
+                tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER
+            }
 
         if (stylusIndex != null) {
             val i = stylusIndex
@@ -1702,32 +1706,49 @@ class MainActivity : AppCompatActivity() {
             val isEraser = toolType == MotionEvent.TOOL_TYPE_ERASER
             val flags = stylusFlags(event.buttonState, isEraser)
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                (event.flags and MotionEvent.FLAG_CANCELED) != 0
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    (event.flags and MotionEvent.FLAG_CANCELED) != 0
             ) {
                 streamClient?.sendStylus(
                     stylusX(view, event.getX(i)),
                     stylusY(view, event.getY(i)),
                     2,
                     pressure = 0f,
-                    flags = flags
+                    flags = flags,
                 )
                 return
             }
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    sendStylusSample(view, event.getX(i), event.getY(i), event.getPressure(i),
+                    sendStylusSample(
+                        view,
+                        event.getX(i),
+                        event.getY(i),
+                        event.getPressure(i),
                         event.getAxisValue(MotionEvent.AXIS_TILT, i),
-                        event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i), 0, flags)
+                        event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i),
+                        0,
+                        flags,
+                    )
                 }
+
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     if (event.actionIndex == i) {
-                        sendStylusSample(view, event.getX(i), event.getY(i), event.getPressure(i),
+                        sendStylusSample(
+                            view,
+                            event.getX(i),
+                            event.getY(i),
+                            event.getPressure(i),
                             event.getAxisValue(MotionEvent.AXIS_TILT, i),
-                            event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i), 0, flags)
+                            event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i),
+                            0,
+                            flags,
+                        )
                     }
                 }
+
                 MotionEvent.ACTION_MOVE -> {
                     // Android batches high-frequency pen samples in MotionEvent history.
                     // Replay them before the current sample to avoid straight-line gaps.
@@ -1740,42 +1761,78 @@ class MainActivity : AppCompatActivity() {
                             event.getHistoricalAxisValue(MotionEvent.AXIS_TILT, i, h),
                             event.getHistoricalAxisValue(MotionEvent.AXIS_ORIENTATION, i, h),
                             1,
-                            flags
+                            flags,
                         )
                     }
-                    sendStylusSample(view, event.getX(i), event.getY(i), event.getPressure(i),
+                    sendStylusSample(
+                        view,
+                        event.getX(i),
+                        event.getY(i),
+                        event.getPressure(i),
                         event.getAxisValue(MotionEvent.AXIS_TILT, i),
-                        event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i), 1, flags)
+                        event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i),
+                        1,
+                        flags,
+                    )
                 }
+
                 MotionEvent.ACTION_UP -> {
-                    sendStylusSample(view, event.getX(i), event.getY(i), 0f,
+                    sendStylusSample(
+                        view,
+                        event.getX(i),
+                        event.getY(i),
+                        0f,
                         event.getAxisValue(MotionEvent.AXIS_TILT, i),
-                        event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i), 2, flags)
+                        event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i),
+                        2,
+                        flags,
+                    )
                 }
+
                 MotionEvent.ACTION_POINTER_UP -> {
                     if (event.actionIndex == i) {
-                        sendStylusSample(view, event.getX(i), event.getY(i), 0f,
+                        sendStylusSample(
+                            view,
+                            event.getX(i),
+                            event.getY(i),
+                            0f,
                             event.getAxisValue(MotionEvent.AXIS_TILT, i),
-                            event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i), 2, flags)
+                            event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i),
+                            2,
+                            flags,
+                        )
                     } else {
                         // A finger pointer lifted; the stylus is still in contact.
-                        sendStylusSample(view, event.getX(i), event.getY(i), event.getPressure(i),
+                        sendStylusSample(
+                            view,
+                            event.getX(i),
+                            event.getY(i),
+                            event.getPressure(i),
                             event.getAxisValue(MotionEvent.AXIS_TILT, i),
-                            event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i), 1, flags)
+                            event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i),
+                            1,
+                            flags,
+                        )
                     }
                 }
+
                 MotionEvent.ACTION_CANCEL -> {
-                    sendStylusSample(view, event.getX(i), event.getY(i), 0f,
+                    sendStylusSample(
+                        view,
+                        event.getX(i),
+                        event.getY(i),
+                        0f,
                         event.getAxisValue(MotionEvent.AXIS_TILT, i),
-                        event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i), 2, flags)
+                        event.getAxisValue(MotionEvent.AXIS_ORIENTATION, i),
+                        2,
+                        flags,
+                    )
                 }
             }
             return
         }
 
-        // A finger event immediately following stylus use may be a palm that
-        // HyperOS has not cancelled. Rely on the tablet's native palm rejection
-        // first; do not change the existing finger gesture path here.
+        // Keep the existing finger touch / gesture path unchanged.
         val rawX = event.x / view.width.toFloat()
         val rawY = event.y / view.height.toFloat()
         val x = if (displayFlipHorizontal) 1f - rawX else rawX
@@ -1795,19 +1852,30 @@ class MainActivity : AppCompatActivity() {
                 inputPredictor.addSample(x, y)
                 streamClient?.sendTouch(x, y, 0, pointerCount, x2, y2)
             }
-            MotionEvent.ACTION_POINTER_DOWN -> streamClient?.sendTouch(x, y, 0, pointerCount, x2, y2)
+
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                streamClient?.sendTouch(x, y, 0, pointerCount, x2, y2)
+            }
+
             MotionEvent.ACTION_MOVE -> {
                 if (pointerCount == 1) {
                     inputPredictor.addSample(x, y)
                     val (px, py) = inputPredictor.predictPosition(12f)
                     streamClient?.sendTouch(px, py, 1, 1)
-                } else streamClient?.sendTouch(x, y, 1, pointerCount, x2, y2)
+                } else {
+                    streamClient?.sendTouch(x, y, 1, pointerCount, x2, y2)
+                }
             }
+
             MotionEvent.ACTION_UP -> {
                 inputPredictor.reset()
                 streamClient?.sendTouch(x, y, 2, 1)
             }
-            MotionEvent.ACTION_POINTER_UP -> streamClient?.sendTouch(x, y, 2, pointerCount, x2, y2)
+
+            MotionEvent.ACTION_POINTER_UP -> {
+                streamClient?.sendTouch(x, y, 2, pointerCount, x2, y2)
+            }
+
             MotionEvent.ACTION_CANCEL -> {
                 inputPredictor.reset()
                 streamClient?.sendTouch(x, y, 2, 1)
@@ -1815,21 +1883,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun stylusX(view: View, rawX: Float): Float {
+    private fun stylusX(
+        view: View,
+        rawX: Float,
+    ): Float {
         val normalized = rawX / view.width.toFloat()
         return (if (displayFlipHorizontal) 1f - normalized else normalized).coerceIn(0f, 1f)
     }
 
-    private fun stylusY(view: View, rawY: Float): Float {
+    private fun stylusY(
+        view: View,
+        rawY: Float,
+    ): Float {
         val normalized = rawY / view.height.toFloat()
         return (if (displayFlipVertical) 1f - normalized else normalized).coerceIn(0f, 1f)
     }
 
-    private fun stylusFlags(buttonState: Int, isEraser: Boolean): Int =
-        1 or
+    private fun stylusFlags(
+        buttonState: Int,
+        isEraser: Boolean,
+    ): Int {
+        return 1 or
             (if ((buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0) 4 else 0) or
             (if ((buttonState and MotionEvent.BUTTON_STYLUS_SECONDARY) != 0) 8 else 0) or
             (if (isEraser) 16 else 0)
+    }
 
     private fun sendStylusSample(
         view: View,
@@ -1839,7 +1917,7 @@ class MainActivity : AppCompatActivity() {
         tiltRadians: Float,
         orientation: Float,
         action: Int,
-        flags: Int
+        flags: Int,
     ) {
         val sinTilt = kotlin.math.sin(tiltRadians.toDouble()).toFloat()
         val tiltX = (-kotlin.math.sin(orientation.toDouble()).toFloat() * sinTilt).coerceIn(-1f, 1f)
@@ -1851,41 +1929,70 @@ class MainActivity : AppCompatActivity() {
             pressure = pressure.coerceIn(0f, 1f),
             tiltX = tiltX,
             tiltY = tiltY,
-            flags = flags
+            flags = flags,
         )
     }
 
-    private fun handleStylusHover(view: View, event: MotionEvent): Boolean {
+    private fun handleStylusHover(
+        view: View,
+        event: MotionEvent,
+    ): Boolean {
         if (event.pointerCount == 0 || view.width <= 0 || view.height <= 0) return false
-        val index = (0 until event.pointerCount).firstOrNull {
-            val tool = event.getToolType(it)
-            tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER
-        } ?: return false
+        val index =
+            (0 until event.pointerCount).firstOrNull {
+                val tool = event.getToolType(it)
+                tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER
+            } ?: return false
         val isEraser = event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER
         val flags = 1 or 2 or (if (isEraser) 16 else 0)
         when (event.actionMasked) {
-            MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE ->
-                sendStylusSample(view, event.getX(index), event.getY(index), 0f,
+            MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE -> {
+                sendStylusSample(
+                    view,
+                    event.getX(index),
+                    event.getY(index),
+                    0f,
                     event.getAxisValue(MotionEvent.AXIS_TILT, index),
-                    event.getAxisValue(MotionEvent.AXIS_ORIENTATION, index), 3, flags)
-            MotionEvent.ACTION_HOVER_EXIT ->
-                sendStylusSample(view, event.getX(index), event.getY(index), 0f,
+                    event.getAxisValue(MotionEvent.AXIS_ORIENTATION, index),
+                    3,
+                    flags,
+                )
+            }
+
+            MotionEvent.ACTION_HOVER_EXIT -> {
+                sendStylusSample(
+                    view,
+                    event.getX(index),
+                    event.getY(index),
+                    0f,
                     event.getAxisValue(MotionEvent.AXIS_TILT, index),
-                    event.getAxisValue(MotionEvent.AXIS_ORIENTATION, index), 4, flags)
+                    event.getAxisValue(MotionEvent.AXIS_ORIENTATION, index),
+                    4,
+                    flags,
+                )
+            }
+
             else -> return false
         }
         return true
     }
 
-    private fun handleStylusGenericMotion(view: View, event: MotionEvent): Boolean {
+    private fun handleStylusGenericMotion(
+        view: View,
+        event: MotionEvent,
+    ): Boolean {
         if (event.pointerCount == 0 || view.width <= 0 || view.height <= 0) return false
-        val index = (0 until event.pointerCount).firstOrNull {
-            val tool = event.getToolType(it)
-            tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER
-        } ?: return false
-        if (event.actionMasked != MotionEvent.ACTION_BUTTON_PRESS &&
-            event.actionMasked != MotionEvent.ACTION_BUTTON_RELEASE
-        ) return false
+        val index =
+            (0 until event.pointerCount).firstOrNull {
+                val tool = event.getToolType(it)
+                tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER
+            } ?: return false
+        if (
+            event.actionMasked != MotionEvent.ACTION_BUTTON_PRESS &&
+                event.actionMasked != MotionEvent.ACTION_BUTTON_RELEASE
+        ) {
+            return false
+        }
 
         val changedButton = event.buttonState or event.actionButton
         val secondaryChanged = (changedButton and MotionEvent.BUTTON_STYLUS_SECONDARY) != 0
@@ -1896,9 +2003,16 @@ class MainActivity : AppCompatActivity() {
 
         val isEraser = event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER
         val flags = stylusFlags(event.buttonState, isEraser)
-        sendStylusSample(view, event.getX(index), event.getY(index), event.getPressure(index),
+        sendStylusSample(
+            view,
+            event.getX(index),
+            event.getY(index),
+            event.getPressure(index),
             event.getAxisValue(MotionEvent.AXIS_TILT, index),
-            event.getAxisValue(MotionEvent.AXIS_ORIENTATION, index), 1, flags)
+            event.getAxisValue(MotionEvent.AXIS_ORIENTATION, index),
+            1,
+            flags,
+        )
         return true
     }
 
