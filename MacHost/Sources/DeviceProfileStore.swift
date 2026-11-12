@@ -51,7 +51,7 @@ struct DeviceProfile: Codable, Equatable, Identifiable {
 /// tablet starts over from the last profile's settings next time. At ~350
 /// bytes a profile the cap is about tidiness, not space.
 final class DeviceProfileStore {
-    static let userDefaultsKey = "devices.profiles"
+    static let userDefaultsKey = "xiaomac.devices.profiles"
     static let capacity = 20
 
     private let defaults: UserDefaults
