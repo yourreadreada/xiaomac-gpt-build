@@ -561,9 +561,6 @@ class StreamClient(
         pointerCount: Int = 1,
         x2: Float = 0f,
         y2: Float = 0f,
-        pressure: Float = 0f,
-        tilt: Float = 0f,
-        flags: Int = 0,
     ) {
         if (!isConnected) return
 
@@ -571,7 +568,7 @@ class StreamClient(
             try {
                 socket?.getOutputStream()?.let { out ->
                     val count = pointerCount.coerceIn(1, 2)
-                    val size = 18 + count * 8 // legacy touch fields + marker + pressure + tilt + flags
+                    val size = 6 + count * 8 // 1 type + 1 count + N*(4x+4y) + 4 action
                     val buffer = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN)
                     buffer.put(2.toByte())
                     buffer.put(count.toByte())
@@ -582,7 +579,35 @@ class StreamClient(
                         buffer.putFloat(y2)
                     }
                     buffer.putInt(action)
-                    buffer.put(0x7E.toByte()) // explicit extension marker; old hosts can distinguish packets
+                    out.write(buffer.array())
+                    out.flush()
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /**
+     * Stylus frames use their own wire message type so older touch framing
+     * stays byte-for-byte unchanged and TCP packet fragmentation is unambiguous.
+     */
+    fun sendStylus(
+        x: Float,
+        y: Float,
+        action: Int,
+        pressure: Float = 0f,
+        tilt: Float = 0f,
+        flags: Int = 1,
+    ) {
+        if (!isConnected) return
+        touchScope.launch {
+            try {
+                socket?.getOutputStream()?.let { out ->
+                    val buffer = ByteBuffer.allocate(22).order(ByteOrder.LITTLE_ENDIAN)
+                    buffer.put(19.toByte())
+                    buffer.putFloat(x)
+                    buffer.putFloat(y)
+                    buffer.putInt(action)
                     buffer.putFloat(pressure)
                     buffer.putFloat(tilt)
                     buffer.put(flags.toByte())
