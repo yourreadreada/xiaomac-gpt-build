@@ -111,7 +111,7 @@ struct SettingsView: View {
                             .scaleEffect(headerHovered ? 1.05 : 1)
                     }
                     .buttonStyle(.plain)
-                    .help("About Side Screen")
+                    .help("About XiaoMac")
                     .animation(.spring(response: 0.3), value: headerHovered)
                     .onHover { headerHovered = $0 }
                     .popover(isPresented: $showAboutFromLogo, arrowEdge: .bottom) {
@@ -120,7 +120,7 @@ struct SettingsView: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text("Side Screen")
+                            Text("XiaoMac")
                                 .font(.system(size: 20, weight: .bold, design: .rounded))
                             Text("v\(AppInfo.version)")
                                 .font(.system(size: 11, weight: .semibold, design: .rounded))
@@ -146,8 +146,8 @@ struct SettingsView: View {
                             }
                     }
                     .buttonStyle(.plain)
-                    .help("About Side Screen")
-                    .accessibilityLabel("About Side Screen")
+                    .help("About XiaoMac")
+                    .accessibilityLabel("About XiaoMac")
                     .popover(isPresented: $showAbout, arrowEdge: .bottom) {
                         AboutPopover(updater: updater)
                     }
@@ -167,7 +167,7 @@ struct SettingsView: View {
                         Button("Cancel", role: .cancel) { }
                         Button("Reset", role: .destructive) {
                             settings.resetToDefaults()
-                            if let window = NSApp.windows.first(where: { $0.title == "Side Screen" }) {
+                            if let window = NSApp.windows.first(where: { $0.title == "XiaoMac" }) {
                                 window.center()
                             }
                         }
@@ -603,7 +603,7 @@ struct SettingsView: View {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("Launch at Login")
                                                 .font(.system(size: 12, weight: .medium))
-                                            Text("Run SideScreen in the background automatically after you log in.")
+                                            Text("Run XiaoMac in the background automatically after you log in.")
                                                 .font(.system(size: 10))
                                                 .foregroundColor(.secondary)
                                         }
@@ -1065,7 +1065,7 @@ struct SettingsView: View {
                                 }
                         }
                         .buttonStyle(.plain)
-                        .help("Quit Side Screen (⌘Q)")
+                        .help("Quit XiaoMac (⌘Q)")
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 14)
@@ -1112,7 +1112,7 @@ struct AboutPopover: View {
                     .resizable()
                     .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Side Screen")
+                    Text("XiaoMac")
                         .font(.system(size: 15, weight: .semibold))
                     Text("Version \(AppInfo.version)")
                         .font(.system(size: 12))
@@ -1124,7 +1124,7 @@ struct AboutPopover: View {
                 }
                 .disabled(!updater.canCheckForUpdates)
                 .help(updater.canCheckForUpdates
-                      ? "Look for a newer version now. Side Screen also checks once a day."
+                      ? "Look for a newer version now. XiaoMac also checks once a day."
                       : "Update checks are only available in the released build.")
             }
 
@@ -1147,7 +1147,7 @@ struct AboutPopover: View {
 
             Divider()
 
-            Text("If you find Side Screen useful, [support the developer](https://sidescreen.dev/donate.html) — it keeps me motivated to build more useful things.")
+            Text("If you find XiaoMac useful, [support the developer](https://sidescreen.dev/donate.html) — it keeps me motivated to build more useful things.")
                 .font(.system(size: 12))
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -1323,7 +1323,7 @@ struct RotationButton: View {
 
 class DisplaySettings: ObservableObject {
     private let defaults = UserDefaults.standard
-    private let keyPrefix = "SideScreen_"
+    private let keyPrefix = "XiaoMac_"
 
     @Published var resolution: String {
         didSet { save("resolution", resolution) }
@@ -1449,7 +1449,7 @@ class DisplaySettings: ObservableObject {
     }
 
     /// The tablet-specific slice of the settings, plus the display position
-    /// VirtualDisplayManager last saved (same `SideScreen_` keys).
+    /// VirtualDisplayManager last saved (same `XiaoMac_` keys).
     var profileSettings: ProfileSettings {
         let hasPosition = defaults.bool(forKey: keyPrefix + "hasPosition")
         return ProfileSettings(
@@ -1605,7 +1605,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             defer: false
         )
 
-        window.title = "Side Screen"
+        window.title = "XiaoMac"
         window.titlebarAppearsTransparent = true
         window.backgroundColor = .windowBackgroundColor
         window.isMovableByWindowBackground = true
@@ -1713,7 +1713,7 @@ struct WirelessSection: View {
                     } else {
                         Text("Generating QR…").foregroundColor(.secondary)
                     }
-                    Text("Scan this QR from Side Screen Android (Wireless tab)")
+                    Text("Scan this QR from XiaoMac Android (Wireless tab)")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
