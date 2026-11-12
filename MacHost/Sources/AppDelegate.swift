@@ -1023,7 +1023,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             lastStylusTiltY = min(max(tiltY, -1), 1)
             handleStylusButtons(flags: flags, at: p1)
             if (flags & 2) != 0 {
-                if action == 3 { moveCursor(to: p1) }
+                if action == 3 {
+                    moveCursor(to: p1)
+                    injectTabletPoint(at: p1, type: .mouseMoved, pressure: 0,
+                                      tiltX: tiltX, tiltY: tiltY, flags: flags)
+                }
                 return
             }
             switch action {
@@ -1064,6 +1068,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         event.setDoubleValueField(.tabletEventPointPressure, value: Double(min(max(pressure, 0), 1)))
         event.setDoubleValueField(.tabletEventTiltX, value: Double(min(max(tiltX, -1), 1)))
         event.setDoubleValueField(.tabletEventTiltY, value: Double(min(max(tiltY, -1), 1)))
+        event.setIntegerValueField(.tabletEventDeviceID, value: 1)
         event.setIntegerValueField(.tabletProximityEventPointerType, value: (flags & 16) != 0 ? 3 : 1)
         event.post(tap: .cghidEventTap)
     }
