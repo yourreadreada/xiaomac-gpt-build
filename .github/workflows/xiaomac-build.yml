@@ -15,7 +15,7 @@ permissions:
 jobs:
   build-and-package:
     name: Build macOS app + Android APK
-    runs-on: macos-26
+    runs-on: macos-26-intel
     timeout-minutes: 45
     steps:
       - name: Check out XiaoMac
