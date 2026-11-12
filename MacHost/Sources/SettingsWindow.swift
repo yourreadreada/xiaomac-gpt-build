@@ -1147,13 +1147,13 @@ struct AboutPopover: View {
 
             Divider()
 
-            Text("If you find XiaoMac useful, [support the developer](https://sidescreen.dev/donate.html) — it keeps me motivated to build more useful things.")
+            Text("XiaoMac is an independent fork of [Side Screen](https://github.com/tranvuongquocdat/SideScreen), originally created by Tran Vuong Quoc Dat. The upstream project remains credited under its MIT licence.")
                 .font(.system(size: 12))
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 4) {
                 Spacer()
-                Text("Developed by Tran Vuong Quoc Dat with")
+                Text("Built on Side Screen by Tran Vuong Quoc Dat, with")
                 Image(systemName: "heart.fill")
                     .foregroundColor(.red)
                 Spacer()
